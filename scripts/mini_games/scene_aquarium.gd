@@ -123,7 +123,7 @@ func _process(delta: float) -> void:
 	if finished:
 		return
 	time_left = maxf(time_left - delta, 0.0)
-	info_label.text = "Trouve le poisson rose !   Temps %.1f s" % time_left
+	info_label.text = "Trouve le poisson rose !   Temps %.1f s   ·   Échap : menu" % time_left
 	if time_left <= 0.0:
 		finish(false, "Temps écoulé !")
 
@@ -144,13 +144,16 @@ func finish(won: bool, reason: String) -> void:
 func show_result(won: bool, reason: String) -> void:
 	title_label.text = "RÉUSSITE !" if won else "ÉCHEC"
 	title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	sub_label.text = reason
+	sub_label.text = reason + "   ·   Échap : menu"
 	overlay.modulate.a = 0.0
 	overlay.visible = true
 	create_tween().tween_property(overlay, "modulate:a", 1.0, 0.4)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
+		get_tree().change_scene_to_file("res://scenes/menu.tscn")
+		return
 	if finished:
 		return
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
