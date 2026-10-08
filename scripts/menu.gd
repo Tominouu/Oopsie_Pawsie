@@ -3,6 +3,7 @@ extends Control
 const GAMES := {
 	"AquariumButton": "res://scenes/mini_games/scene_aquarium.tscn",
 	"CableButton": "res://scenes/mini_games/cable.tscn",
+	"CroquettesButton": "res://scenes/mini_games/croquettes.tscn",
 }
 
 
