@@ -11,6 +11,7 @@ config_version=5
 [application]
 
 config/name="Oopsie Pawsie"
+run/main_scene="res://scenes/mini_games/scene_aquarium.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://assets/sprites/icon.svg"
 
