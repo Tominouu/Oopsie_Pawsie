@@ -64,3 +64,9 @@ custom_minimum_size = Vector2(360, 72)
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
 text = "🔌  Débranche le câble"
+
+[node name="CroquettesButton" type="Button" parent="CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(360, 72)
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "🐾  Trouve les croquettes"
