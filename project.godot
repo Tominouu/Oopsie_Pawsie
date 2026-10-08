@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Oopsie Pawsie"
-run/main_scene="res://scenes/mini_games/scene_aquarium.tscn"
+run/main_scene="uid://b6qussvjka7pf"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://assets/sprites/icon.svg"
 
@@ -21,6 +21,7 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/vsync/vsync_mode=0
+mouse_cursor/custom_image="uid://ch0t2mmbgnqoq"
 
 [physics]
 

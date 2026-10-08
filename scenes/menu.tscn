@@ -3,6 +3,9 @@
 [ext_resource type="Texture2D" uid="uid://v76e2kdbvaov" path="res://assets/background/menu_reference.png" id="1_yqeox"]
 [ext_resource type="Texture2D" uid="uid://d0ss1dsnn6ne1" path="res://assets/background/background_menu.png" id="2_con2f"]
 [ext_resource type="Texture2D" uid="uid://bcww44jr7ga77" path="res://assets/background/cat_menu.png" id="3_mhnvy"]
+[ext_resource type="Texture2D" uid="uid://d08wcavo6b2up" path="res://assets/background/title_background.png" id="4_mhnvy"]
+[ext_resource type="Texture2D" uid="uid://cm782ltih4aoc" path="res://assets/background/button_background.png" id="5_4ytvr"]
+[ext_resource type="FontFile" uid="uid://dyq4pk1w2tbyt" path="res://assets/fonts/LuckiestGuy-Regular.ttf" id="6_g3eks"]
 
 [node name="Menu" type="Control" unique_id=122120522]
 layout_mode = 3
@@ -13,22 +16,86 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Background_ref" type="TextureRect" parent="." unique_id=2060922042]
+visible = false
 layout_mode = 0
 offset_right = 40.0
 offset_bottom = 40.0
 texture = ExtResource("1_yqeox")
 
-[node name="background" type="TextureRect" parent="." unique_id=1323316256]
-visible = false
+[node name="main_background" type="TextureRect" parent="." unique_id=1323316256]
 layout_mode = 0
 offset_right = 40.0
 offset_bottom = 40.0
 texture = ExtResource("2_con2f")
 
 [node name="cat" type="TextureRect" parent="." unique_id=291874069]
-visible = false
 layout_mode = 0
 offset_top = 205.0
 offset_right = 448.0
 offset_bottom = 720.0
 texture = ExtResource("3_mhnvy")
+
+[node name="title_background" type="TextureRect" parent="." unique_id=286421999]
+layout_mode = 0
+offset_left = 434.0
+offset_top = 83.0
+offset_right = 838.0
+offset_bottom = 330.0
+texture = ExtResource("4_mhnvy")
+
+[node name="button_background" type="TextureRect" parent="." unique_id=994653946]
+layout_mode = 0
+offset_left = 440.0
+offset_top = 381.0
+offset_right = 822.0
+offset_bottom = 464.0
+texture = ExtResource("5_4ytvr")
+
+[node name="Label" type="Label" parent="button_background" unique_id=2044135562]
+layout_mode = 0
+offset_left = 66.0
+offset_top = 21.0
+offset_right = 313.0
+offset_bottom = 72.0
+theme_override_colors/font_color = Color(0.17254902, 0.1254902, 0.11372549, 1)
+theme_override_fonts/font = ExtResource("6_g3eks")
+theme_override_font_sizes/font_size = 50
+text = "PLAY GAME"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label" type="Label" parent="button_background/Label" unique_id=62985204]
+layout_mode = 0
+offset_left = 6.0
+offset_top = -265.0
+offset_right = 253.0
+offset_bottom = -120.0
+theme_override_colors/font_color = Color(0.972549, 0.5764706, 0.03529412, 1)
+theme_override_fonts/font = ExtResource("6_g3eks")
+theme_override_font_sizes/font_size = 70
+text = "OOPSIE
+PAWSIE"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="button_background2" type="TextureRect" parent="." unique_id=886967886]
+layout_mode = 0
+offset_left = 439.0
+offset_top = 488.0
+offset_right = 821.0
+offset_bottom = 571.0
+texture = ExtResource("5_4ytvr")
+
+[node name="Label" type="Label" parent="button_background2" unique_id=1074999278]
+layout_mode = 1
+anchors_preset = -1
+offset_left = 67.0
+offset_top = 22.0
+offset_right = 314.0
+offset_bottom = 73.0
+theme_override_colors/font_color = Color(0.17254902, 0.1254902, 0.11372549, 1)
+theme_override_fonts/font = ExtResource("6_g3eks")
+theme_override_font_sizes/font_size = 50
+text = "SETTINGS"
+horizontal_alignment = 1
+vertical_alignment = 1
