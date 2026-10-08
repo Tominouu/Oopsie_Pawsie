@@ -1,3 +1,17 @@
 [gd_scene format=3 uid="uid://b6qussvjka7pf"]
 
-[node name="Menu" type="Node2D" unique_id=1043791573]
+[ext_resource type="Texture2D" uid="uid://v76e2kdbvaov" path="res://assets/background/menu_reference.png" id="1_yqeox"]
+
+[node name="Menu" type="Control" unique_id=122120522]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="TextureRect" parent="." unique_id=2060922042]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+texture = ExtResource("1_yqeox")
