@@ -1,6 +1,8 @@
 [gd_scene format=3 uid="uid://b6qussvjka7pf"]
 
 [ext_resource type="Texture2D" uid="uid://v76e2kdbvaov" path="res://assets/background/menu_reference.png" id="1_yqeox"]
+[ext_resource type="Texture2D" uid="uid://d0ss1dsnn6ne1" path="res://assets/background/background_menu.png" id="2_con2f"]
+[ext_resource type="Texture2D" uid="uid://bcww44jr7ga77" path="res://assets/background/cat_menu.png" id="3_mhnvy"]
 
 [node name="Menu" type="Control" unique_id=122120522]
 layout_mode = 3
@@ -10,8 +12,23 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Background" type="TextureRect" parent="." unique_id=2060922042]
+[node name="Background_ref" type="TextureRect" parent="." unique_id=2060922042]
 layout_mode = 0
 offset_right = 40.0
 offset_bottom = 40.0
 texture = ExtResource("1_yqeox")
+
+[node name="background" type="TextureRect" parent="." unique_id=1323316256]
+visible = false
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+texture = ExtResource("2_con2f")
+
+[node name="cat" type="TextureRect" parent="." unique_id=291874069]
+visible = false
+layout_mode = 0
+offset_top = 205.0
+offset_right = 448.0
+offset_bottom = 720.0
+texture = ExtResource("3_mhnvy")
