@@ -1,11 +1,13 @@
 [gd_scene format=3 uid="uid://b6qussvjka7pf"]
 
+[ext_resource type="Script" uid="uid://bby4kf1pvqjll" path="res://scripts/menu.gd" id="1_v86rl"]
 [ext_resource type="Texture2D" uid="uid://v76e2kdbvaov" path="res://assets/background/menu_reference.png" id="1_yqeox"]
 [ext_resource type="Texture2D" uid="uid://d0ss1dsnn6ne1" path="res://assets/background/background_menu.png" id="2_con2f"]
 [ext_resource type="Texture2D" uid="uid://bcww44jr7ga77" path="res://assets/background/cat_menu.png" id="3_mhnvy"]
 [ext_resource type="Texture2D" uid="uid://d08wcavo6b2up" path="res://assets/background/title_background.png" id="4_mhnvy"]
 [ext_resource type="Texture2D" uid="uid://cm782ltih4aoc" path="res://assets/background/button_background.png" id="5_4ytvr"]
 [ext_resource type="FontFile" uid="uid://dyq4pk1w2tbyt" path="res://assets/fonts/LuckiestGuy-Regular.ttf" id="6_g3eks"]
+[ext_resource type="AudioStream" uid="uid://cclpjll1kj3f7" path="res://assets/sounds/meow1.mp3" id="8_13sgg"]
 
 [node name="Menu" type="Control" unique_id=122120522]
 layout_mode = 3
@@ -14,6 +16,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("1_v86rl")
 
 [node name="Background_ref" type="TextureRect" parent="." unique_id=2060922042]
 visible = false
@@ -99,3 +102,28 @@ theme_override_font_sizes/font_size = 50
 text = "SETTINGS"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="playgame_button" type="Button" parent="." unique_id=1608084016]
+modulate = Color(1, 1, 1, 0)
+self_modulate = Color(1, 1, 1, 0)
+z_index = 10
+layout_mode = 0
+offset_left = 432.0
+offset_top = 379.0
+offset_right = 827.0
+offset_bottom = 466.0
+
+[node name="easteregg" type="Button" parent="." unique_id=1045806951]
+modulate = Color(1, 1, 1, 0)
+self_modulate = Color(1, 1, 1, 0)
+layout_mode = 0
+offset_left = 429.0
+offset_top = 79.0
+offset_right = 842.0
+offset_bottom = 337.0
+
+[node name="clickSound" type="AudioStreamPlayer2D" parent="." unique_id=116181884]
+stream = ExtResource("8_13sgg")
+
+[connection signal="pressed" from="playgame_button" to="." method="_on_playgame_button_pressed"]
+[connection signal="pressed" from="easteregg" to="." method="_on_easteregg_pressed"]
