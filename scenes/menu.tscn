@@ -11,6 +11,11 @@
 
 [node name="Menu" type="Control" unique_id=122120522]
 layout_mode = 3
+[ext_resource type="Script" path="res://scripts/menu.gd" id="1_menu"]
+[ext_resource type="FontFile" uid="uid://bomqypw1v7kgc" path="res://assets/fonts/LilitaOne-Regular.ttf" id="2_font"]
+
+[node name="Menu" type="Control"]
+layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -127,3 +132,63 @@ stream = ExtResource("8_13sgg")
 
 [connection signal="pressed" from="playgame_button" to="." method="_on_playgame_button_pressed"]
 [connection signal="pressed" from="easteregg" to="." method="_on_easteregg_pressed"]
+script = ExtResource("1_menu")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.1176471, 0.1058824, 0.1803922, 1)
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
+layout_mode = 2
+theme_override_constants/separation = 24
+alignment = 1
+
+[node name="Title" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 64
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "Oopsie Pawsie"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.85, 0.85, 0.85, 1)
+text = "Choisis un mini-jeu"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+
+[node name="AquariumButton" type="Button" parent="CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(360, 72)
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "🐟  Trouve le poisson rose"
+
+[node name="CableButton" type="Button" parent="CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(360, 72)
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "🔌  Débranche le câble"
+
+[node name="CroquettesButton" type="Button" parent="CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(360, 72)
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "🐾  Trouve les croquettes"
