@@ -1,11 +1,15 @@
 extends Node2D
 ## Oopsie Pawsie — mini-jeu « Mission : opération croquettes » (maquette Figma « MINI JEU - PLACARD »).
 ## Le sachet de croquettes est caché au fond du placard, derrière plusieurs rangées de produits.
-## Clic sur un produit = coup de patte qui le dégage. Clic sur le sachet = gagné, avant la fin du chrono.
+## Clic sur un produit = coup de patte qui le dégage (et le fait exploser, contenu partout).
+## Clic sur le sachet = gagné, avant la fin du chrono. Mais chaque produit qui tombe fait du
+## bruit (une conserve bien plus qu'un paquet de farine) : si la jauge déborde, c'est perdu.
 
 enum State { INTRO, PLAYING, FINISHED }
 
 const Item := preload("res://scripts/mini_games/croquettes_item.gd")
+const Debris := preload("res://scripts/mini_games/croquettes_debris.gd")
+const SON_TEX := preload("res://assets/sprites/croquettes/son.svg")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const HEADER_TEX := preload("res://assets/sprites/croquettes/header.svg")
@@ -27,6 +31,21 @@ const PRODUCTS: Array[Texture2D] = [
 	preload("res://assets/sprites/croquettes/sac_poisson.svg"),
 ]
 const CHIPS_INDEX := 1
+## Pour chaque produit (même ordre que PRODUCTS) : son contenu, le bruit qu'il fait en tombant
+## (multiplie noise_per_item) et ses onomatopées.
+const PRODUCT_FX := [
+	{"kind": "cereales", "noise": 1.0, "words": ["CRAC !", "SCRITCH !"]},
+	{"kind": "chips", "noise": 1.25, "words": ["CRUNCH !", "CROUNCH !"]},
+	{"kind": "mais", "noise": 2.5, "words": ["CLANG !", "BONG !"]},
+	{"kind": "pois", "noise": 2.5, "words": ["CLONG !", "BANG !"]},
+	{"kind": "farine", "noise": 0.75, "words": ["POUF !", "PFFF !"]},
+	{"kind": "pates", "noise": 1.0, "words": ["CRAC CRAC !", "CLIC !"]},
+	{"kind": "poisson", "noise": 1.0, "words": ["LEURRE !", "BEURK !"]},
+]
+
+## Jauge de bruit : même emplacement et même style que dans le mini-jeu de la souris.
+const GAUGE_RECT := Rect2(1200, 295, 30, 226)
+const COL_NOISE := Color("e01518")
 
 const SCREEN := Vector2(1280, 720)
 const HEADER_H := 116.0
@@ -62,6 +81,12 @@ const LOSE_COLOR := Color(0.95, 0.30, 0.30)
 ## Rangées où le sachet peut être caché (0 = tout au fond).
 @export_range(0, 5) var target_max_layer := 1
 @export var result_delay := 0.9
+## Bruit qui réveille les humains (la jauge est pleine) : avec 180, on dégage 60 à 70 produits.
+@export var noise_max := 180.0
+## Bruit de base d'un produit qui tombe (× son facteur : 2,5 pour une conserve, 0,75 pour la farine),
+## et d'un coup de patte dans le vide sur la planche.
+@export var noise_per_item := 2.0
+@export var noise_per_tap := 1.0
 
 var _state := State.INTRO
 var _time_left := 0.0
@@ -80,6 +105,15 @@ var _title_label: Label
 var _sub_label: Label
 var _audio: AudioStreamPlayer
 
+var _noise := 0.0
+var _noise_shown := 0.0
+var _gauge_fill: Panel
+var _son_icon: TextureRect
+var _debris: Debris
+var _fx_layer: CanvasLayer
+var _flash: ColorRect
+var _shake := 0.0
+
 
 func _ready() -> void:
 	randomize()
@@ -89,8 +123,15 @@ func _ready() -> void:
 	_shelf = Node2D.new()
 	add_child(_shelf)
 	_fill_shelves()
+	# Contenu des produits : posé sur les étagères et en vol, devant les produits.
+	_debris = Debris.new()
+	_debris.setup(SCREEN, ROW_FLOORS[0])
+	add_child(_debris)
+	add_child(_debris.air)
 	_build_paw()
 	_build_hud_front()
+	_build_gauge()
+	_build_fx()
 	_build_popup()
 	_build_overlay()
 	_audio = AudioStreamPlayer.new()
@@ -101,6 +142,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Si on quitte pendant un arrêt sur image, le jeu ne doit pas rester au ralenti.
+	Engine.time_scale = 1.0
 
 
 # --- Construction (ordre = ordre des calques de la maquette) ------------------
@@ -190,6 +233,28 @@ func _build_hud_front() -> void:
 	add_child(_time_label)
 
 
+func _build_gauge() -> void:
+	# Icône haut-parleur : le SVG déborde de ~2 px autour du groupe de la maquette de la souris.
+	_son_icon = _add_texture(SON_TEX, Vector2(1188, 235) - Vector2(2.07, 2.07))
+	_son_icon.pivot_offset = _son_icon.size * 0.5
+	add_child(_make_panel(GAUGE_RECT, COL_CREAM, 15))
+	_gauge_fill = _make_panel(Rect2(GAUGE_RECT.position.x, GAUGE_RECT.end.y, GAUGE_RECT.size.x, 0), COL_NOISE, 15)
+	add_child(_gauge_fill)
+
+
+## Calque d'effets plein écran : flash et farine « sur la caméra ».
+func _build_fx() -> void:
+	_fx_layer = CanvasLayer.new()
+	_fx_layer.layer = 1
+	add_child(_fx_layer)
+	_flash = ColorRect.new()
+	_flash.color = Color(1.0, 0.95, 0.85)
+	_flash.size = SCREEN
+	_flash.modulate.a = 0.0
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fx_layer.add_child(_flash)
+
+
 func _build_popup() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 1
@@ -223,7 +288,7 @@ func _build_popup() -> void:
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.custom_minimum_size = Vector2(782, 0)
 	body.text = "The food is somewhere in this closet. Move everything around " \
-		+ "and turn everything over to find it within the time limit."
+		+ "to find it within the time limit, but don't make too much noise!"
 	body.position = Vector2(254, 400)
 	body.size = Vector2(782, 160)
 	_popup.add_child(body)
@@ -324,6 +389,20 @@ func _process(delta: float) -> void:
 	if not _striking:
 		_paw.position = get_viewport().get_mouse_position()
 
+	# Tremblement de l'écran après un coup.
+	_shake = move_toward(_shake, 0.0, 3.0 * delta)
+	position = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 16.0 * _shake * _shake
+
+	_noise_shown = move_toward(_noise_shown, _noise, 120.0 * delta)
+	var h := GAUGE_RECT.size.y * clampf(_noise_shown / noise_max, 0.0, 1.0)
+	_gauge_fill.position.y = GAUGE_RECT.end.y - h
+	_gauge_fill.size.y = h
+	_gauge_fill.visible = h > 0.5
+	if _noise >= noise_max * 0.7 and _state == State.PLAYING:
+		_son_icon.scale = Vector2.ONE * (1.0 + 0.08 * sin(Time.get_ticks_msec() * 0.02))
+	else:
+		_son_icon.scale = Vector2.ONE
+
 	if _state != State.PLAYING:
 		return
 	_time_left = maxf(_time_left - delta, 0.0)
@@ -346,14 +425,25 @@ func _strike(at: Vector2) -> void:
 		if not item.hit_test(at):
 			continue
 		if item.is_target:
-			_finish(true, "Croquettes trouvées en %.1f s  ·  %d produits dégagés" \
-				% [time_limit - _time_left, _cleared])
+			_jackpot(item, at)
+			_finish(true, "Croquettes trouvées en %.1f s  ·  %d produits dégagés  ·  Bruit %d %%" \
+				% [time_limit - _time_left, _cleared, roundi(_noise / noise_max * 100.0)])
 		else:
-			_throw(item)
+			_throw(item, at)
+			if _noise >= noise_max:
+				_finish(false, "Trop de bruit : les humains se réveillent !")
 		return
 
+	# Coup de patte dans le vide sur la planche : petit « toc » qui fait un peu de bruit.
+	if PLANK_RECT.has_point(at):
+		_noise += noise_per_tap
+		_shake = maxf(_shake, 0.15)
+		_pop_text("TOC !", at, 28)
+		if _noise >= noise_max:
+			_finish(false, "Trop de bruit : les humains se réveillent !")
 
-func _throw(item: Item) -> void:
+
+func _throw(item: Item, at: Vector2) -> void:
 	item.flying = true
 	item.move_to_front()  # passe devant le reste pendant le vol
 	var center := item.to_global(Vector2(0, -item.texture.get_height() * 0.5))
@@ -361,14 +451,81 @@ func _throw(item: Item) -> void:
 	if side == 0.0:
 		side = 1.0
 	var dir := Vector2(side * randf_range(0.6, 1.0), randf_range(-0.9, -0.4)).normalized()
+
+	# Le produit éclate : son contenu gicle à l'opposé du vol, et il en sème en partant.
+	var fx: Dictionary = PRODUCT_FX[maxi(PRODUCTS.find(item.texture), 0)]
+	var kind: String = fx.kind
+	_debris.burst(center, kind, 1.0, Vector2(-dir.x, -0.6))
+	_noise += noise_per_item * float(fx.noise)
+	_pop_text((fx.words as Array).pick_random(), at)
+	_shake = maxf(_shake, 0.25 + 0.2 * float(fx.noise))
+	if float(fx.noise) >= 2.0:
+		# Les conserves : bruit de métal, ça secoue plus fort.
+		_flash_screen(0.15)
+		_hit_stop(0.05)
+	if kind == "farine":
+		Debris.screen_puffs(_fx_layer, randi_range(1, 2), SCREEN)
+
+	var start := item.position
 	var tween := item.create_tween()
-	tween.tween_property(item, "position", item.position + dir * 900.0, 0.55) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_method(func(t: float) -> void:
+		item.position = start + dir * 900.0 * (1.0 - (1.0 - t) * (1.0 - t))
+		if t < 0.6 and randf() < 0.4:
+			_debris.spill(item.to_global(Vector2(0, -item.texture.get_height() * 0.5)), kind, dir * 600.0), 0.0, 1.0, 0.55)
 	tween.parallel().tween_property(item, "rotation", item.rotation + side * randf_range(4.0, 9.0), 0.55)
 	tween.parallel().tween_property(item, "modulate:a", 0.0, 0.55).set_ease(Tween.EASE_IN)
 	tween.tween_callback(item.queue_free)
 	_cleared += 1
 	_update_lighting(true)
+
+
+## Le sachet trouvé : il explose en pluie de croquettes.
+func _jackpot(bag: Item, at: Vector2) -> void:
+	var center := bag.to_global(Vector2(0, -bag.texture.get_height() * 0.5))
+	_debris.burst(center, "croquettes", 5.0, Vector2.UP)
+	_shake = 1.5
+	_flash_screen(0.45)
+	_hit_stop(0.18)
+	_pop_text("JACKPOT !", at, 52)
+	for i in 3:
+		await get_tree().create_timer(0.12, true, false, true).timeout
+		if not is_inside_tree():
+			return
+		_debris.burst(center + Vector2(randf_range(-30, 30), randf_range(-20, 10)), "croquettes", 1.8, \
+			Vector2.from_angle(randf_range(-PI, 0.0)))
+		_shake = maxf(_shake, 0.8)
+
+
+func _flash_screen(strength: float) -> void:
+	_flash.modulate.a = strength
+	_flash.create_tween().tween_property(_flash, "modulate:a", 0.0, 0.3)
+
+
+## Arrêt sur image : le jeu se fige une fraction de seconde pour donner du poids au coup.
+func _hit_stop(duration: float) -> void:
+	Engine.time_scale = 0.05
+	await get_tree().create_timer(duration, true, false, true).timeout
+	Engine.time_scale = 1.0
+
+
+func _pop_text(text: String, at: Vector2, font_size := 40) -> void:
+	var l := _make_label(font_size, COL_CREAM)
+	l.text = text
+	l.add_theme_color_override("font_outline_color", COL_DARK)
+	l.add_theme_constant_override("outline_size", 10)
+	l.size = Vector2(300, 60)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.position = at - Vector2(150, 100)
+	l.pivot_offset = l.size * 0.5
+	l.rotation = randf_range(-0.2, 0.2)
+	l.scale = Vector2.ONE * 0.4
+	add_child(l)
+	move_child(l, _paw.get_index())
+	var tween := l.create_tween()
+	tween.tween_property(l, "scale", Vector2.ONE, 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(l, "position:y", l.position.y - 40, 0.8)
+	tween.tween_property(l, "modulate:a", 0.0, 0.25)
+	tween.tween_callback(l.queue_free)
 
 
 ## Un produit dont le centre n'est plus caché par rien devant lui passe en pleine lumière.
