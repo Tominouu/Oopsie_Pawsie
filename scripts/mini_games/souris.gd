@@ -7,6 +7,7 @@ extends Node2D
 enum State { INTRO, PLAYING, FINISHED }
 
 const Proie := preload("res://scripts/mini_games/souris_proie.gd")
+const Sang := preload("res://scripts/mini_games/souris_sang.gd")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const HEADER_TEX := preload("res://assets/sprites/souris/header.svg")
@@ -49,6 +50,7 @@ const HIT_RADIUS := 55.0
 ## Manette : rayon autour du corps où l'aide à la visée agit.
 const PAD_ASSIST_RADIUS := 90.0
 const STRIKE_COOLDOWN := 0.22
+const HIT_WORDS := ["SPLAT !", "SCRONCH !", "PAF !", "CRAC !", "SPLOTCH !"]
 const NOISE_MAX := 100.0
 
 const COL_GROUT := Color("ba9b7c")
@@ -96,17 +98,29 @@ var _title_label: Label
 var _sub_label: Label
 var _audio: AudioStreamPlayer
 
+var _sang: Sang
+var _fx_layer: CanvasLayer
+var _flash: ColorRect
+var _shake := 0.0
+var _drip_timer := 0.0
+
 
 func _ready() -> void:
 	randomize()
 	_time_left = time_limit
 	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	_build_hud_back()
+	# Taches de sang au sol (sous la souris), gouttes en vol (au-dessus).
+	_sang = Sang.new()
+	_sang.setup(Rect2(0, HEADER_H, SCREEN.x, SCREEN.y - HEADER_H))
+	add_child(_sang)
 	_build_proie()
+	add_child(_sang.air)
 	_build_gauge()
 	_build_paw()
 	_build_hud_front()
 	_build_popup()
+	_build_fx()
 	_build_overlay()
 	_build_viseur()
 	_audio = AudioStreamPlayer.new()
@@ -117,6 +131,21 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Si on quitte pendant un arrêt sur image, le jeu ne doit pas rester au ralenti.
+	Engine.time_scale = 1.0
+
+
+## Calque d'effets plein écran : flash rouge et éclaboussures « sur la caméra ».
+func _build_fx() -> void:
+	_fx_layer = CanvasLayer.new()
+	_fx_layer.layer = 1
+	add_child(_fx_layer)
+	_flash = ColorRect.new()
+	_flash.color = Color(0.85, 0.0, 0.05)
+	_flash.size = SCREEN
+	_flash.modulate.a = 0.0
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fx_layer.add_child(_flash)
 
 
 # --- Construction (ordre = ordre des calques de la maquette) ------------------
@@ -363,6 +392,17 @@ func _process(delta: float) -> void:
 	if not _striking:
 		_paw.position = _paw.position.lerp(_paw_rest_position(), minf(1.0, 10.0 * delta))
 
+	# Tremblement de l'écran après un coup.
+	_shake = move_toward(_shake, 0.0, 3.0 * delta)
+	position = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 16.0 * _shake * _shake
+
+	# La souris blessée saigne en courant, d'autant plus qu'elle a pris de coups.
+	if _proie.hits > 0 and not _proie.is_dead() and _state == State.PLAYING:
+		_drip_timer -= delta
+		if _drip_timer <= 0.0:
+			_drip_timer = 0.3 / _proie.hits
+			_sang.drip(_proie.body_position())
+
 	_noise_shown = move_toward(_noise_shown, _noise, 120.0 * delta)
 	var h := GAUGE_RECT.size.y * clampf(_noise_shown / NOISE_MAX, 0.0, 1.0)
 	_gauge_fill.position.y = GAUGE_RECT.end.y - h
@@ -397,6 +437,8 @@ func _update_time_label() -> void:
 
 func _strike(at: Vector2) -> void:
 	_cooldown = STRIKE_COOLDOWN
+	# Le sang gicle dans le sens du coup (la patte arrive de sa position de repos).
+	var swing := at - _paw.position
 	_animate_paw(Vector2(at.x, maxf(at.y, HEADER_H)))
 
 	var hit := at.distance_to(_proie.body_position()) <= HIT_RADIUS
@@ -406,13 +448,17 @@ func _strike(at: Vector2) -> void:
 		_proie.take_hit(lethal)
 		_spawn_griffe(at)
 		if lethal:
+			_kill_fx(at, swing)
 			_finish(true, "Souris éliminée en %d coups  ·  Bruit %d %%" % [_proie.hits + _misses, roundi(_noise)])
 			return
+		_hit_fx(at, swing)
 	elif _proie.tail_hit_test(at):
 		# Coup réussi côté bruit, mais sans dégât : la souris perd juste sa queue.
 		_noise += noise_per_hit
 		_proie.lose_tail(self)
 		_spawn_griffe(at)
+		_sang.splash(at, swing, 0.5)
+		_shake = maxf(_shake, 0.3)
 		_pop_text("SNIP !", at)
 	else:
 		_misses += 1
@@ -420,6 +466,48 @@ func _strike(at: Vector2) -> void:
 
 	if _noise >= NOISE_MAX:
 		_finish(false, "Trop de bruit : la souris s'est enfuie !")
+
+
+## Coup qui touche : giclée de plus en plus grosse à chaque coup, écran qui tremble, flash, mini arrêt sur image.
+func _hit_fx(at: Vector2, swing: Vector2) -> void:
+	var power := 1.0 + 0.3 * (_proie.hits - 1)
+	_sang.splash(at, swing, power)
+	_shake = maxf(_shake, 0.55 + 0.1 * _proie.hits)
+	_flash_screen(0.22)
+	_hit_stop(0.06)
+	_pop_text(HIT_WORDS.pick_random(), at)
+	if _proie.hits >= 3:
+		Sang.screen_splats(_fx_layer, _proie.hits - 2, SCREEN)
+
+
+## Coup fatal : explosion en plusieurs vagues, mare de sang, l'écran se fait repeindre.
+func _kill_fx(at: Vector2, swing: Vector2) -> void:
+	var body := _proie.body_position()
+	_sang.splash(at, swing, 3.5)
+	_sang.pool(body, 70.0)
+	_shake = 1.6
+	_flash_screen(0.5)
+	Sang.screen_splats(_fx_layer, 7, SCREEN)
+	_pop_text("K.O. !", at)
+	_hit_stop(0.18)
+	for i in 4:
+		await get_tree().create_timer(0.09, true, false, true).timeout
+		if not is_inside_tree():
+			return
+		_sang.splash(body + Vector2(randf_range(-25, 25), randf_range(-25, 25)), Vector2.from_angle(randf() * TAU), 1.6)
+		_shake = maxf(_shake, 0.9)
+
+
+func _flash_screen(strength: float) -> void:
+	_flash.modulate.a = strength
+	_flash.create_tween().tween_property(_flash, "modulate:a", 0.0, 0.3)
+
+
+## Arrêt sur image : le jeu se fige une fraction de seconde pour donner du poids au coup.
+func _hit_stop(duration: float) -> void:
+	Engine.time_scale = 0.05
+	await get_tree().create_timer(duration, true, false, true).timeout
+	Engine.time_scale = 1.0
 
 
 func _animate_paw(at: Vector2) -> void:
