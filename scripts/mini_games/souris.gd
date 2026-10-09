@@ -11,7 +11,8 @@ const Proie := preload("res://scripts/mini_games/souris_proie.gd")
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const HEADER_TEX := preload("res://assets/sprites/souris/header.svg")
 const NUIT_TEX := preload("res://assets/sprites/souris/nuit.svg")
-const SOURIS_TEX := preload("res://assets/sprites/souris/souris.svg")
+const SOURIS_TEX := preload("res://assets/sprites/souris/souris_corps.svg")
+const QUEUE_TEX := preload("res://assets/sprites/souris/souris_queue.svg")
 const PATTE_TEX := preload("res://assets/sprites/souris/patte.svg")
 const SON_TEX := preload("res://assets/sprites/souris/son.svg")
 const CHRONO_TEX := preload("res://assets/sprites/souris/chrono.svg")
@@ -40,6 +41,9 @@ const PAW_REST_DROP := 150.0
 const PAW_REST_MIN_Y := 430.0
 
 const GAUGE_RECT := Rect2(1200, 295, 30, 226)
+const CLOSE_RECT := Rect2(1075.5, 278.5, 33.66, 33.66)
+## Marge autour de la croix pour la viser sans avoir à être au pixel près.
+const CLOSE_MARGIN := 12.0
 
 const HIT_RADIUS := 55.0
 const STRIKE_COOLDOWN := 0.22
@@ -81,6 +85,8 @@ var _time_label: Label
 var _son_icon: TextureRect
 var _gauge_fill: Panel
 var _popup: Control
+var _close_btn: Control
+var _close_cross: TextureRect
 var _overlay: ColorRect
 var _title_label: Label
 var _sub_label: Label
@@ -119,6 +125,7 @@ func _build_hud_back() -> void:
 func _build_proie() -> void:
 	_proie = Proie.new()
 	_proie.texture = SOURIS_TEX
+	_proie.tail_texture = QUEUE_TEX
 	_proie.position = SOURIS_START
 	_proie.rotation_degrees = SOURIS_START_ROT
 	_proie.bounds = PLAYFIELD
@@ -183,6 +190,8 @@ func _build_popup() -> void:
 	var box := Panel.new()
 	box.position = Vector2(162, 262)
 	box.size = Vector2(966, 327)
+	# Sinon le Panel avale les clics et la croix ne reçoit jamais le tir.
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
 	style.bg_color = COL_CREAM
 	style.border_color = COL_DARK
@@ -208,8 +217,16 @@ func _build_popup() -> void:
 	body.size = Vector2(872, 196)
 	_popup.add_child(body)
 
-	_popup.add_child(_make_panel(Rect2(1075.5, 278.5, 33.66, 33.66), COL_CLOSE_BG, 4))
-	_popup.add_child(_add_texture(FERMER_TEX, Vector2(1081.44, 286.32), false))
+	# Bouton fermer : on regroupe fond + croix pour pouvoir le faire réagir au survol du viseur.
+	_close_btn = Control.new()
+	_close_btn.position = CLOSE_RECT.position
+	_close_btn.size = CLOSE_RECT.size
+	_close_btn.pivot_offset = CLOSE_RECT.size * 0.5
+	_close_btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_popup.add_child(_close_btn)
+	_close_btn.add_child(_make_panel(Rect2(Vector2.ZERO, CLOSE_RECT.size), COL_CLOSE_BG, 4))
+	_close_cross = _add_texture(FERMER_TEX, Vector2(1081.44, 286.32) - CLOSE_RECT.position, false)
+	_close_btn.add_child(_close_cross)
 
 
 func _build_overlay() -> void:
@@ -288,19 +305,27 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
 		get_tree().change_scene_to_file("res://scenes/menu.tscn")
 		return
+	if event is InputEventMouse:
+		# Le viseur suit exactement la position de l'événement (pas de décalage d'une frame).
+		_viseur.position = (event as InputEventMouse).position
 	if not (event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT):
 		return
 
 	match _state:
 		State.INTRO:
-			_start_game()
+			if _is_over_close(_viseur.position):
+				_start_game()
 		State.PLAYING:
 			if _cooldown <= 0.0:
 				_strike(make_input_local(event).position)
 		State.FINISHED:
 			if _overlay.visible:
 				get_tree().reload_current_scene()
+
+
+func _is_over_close(p: Vector2) -> bool:
+	return CLOSE_RECT.grow(CLOSE_MARGIN).has_point(p)
 
 
 func _start_game() -> void:
@@ -315,6 +340,11 @@ func _start_game() -> void:
 func _process(delta: float) -> void:
 	_viseur.position = get_viewport().get_mouse_position()
 	_proie.set_process(_state == State.PLAYING or _proie.is_dead())
+
+	if _state == State.INTRO:
+		var hover := _is_over_close(_viseur.position)
+		_close_btn.scale = Vector2.ONE * (1.2 if hover else 1.0)
+		_close_cross.modulate = COL_NOISE if hover else Color.WHITE
 
 	if not _striking:
 		_paw.position = _paw.position.lerp(_paw_rest_position(), minf(1.0, 10.0 * delta))
@@ -362,6 +392,12 @@ func _strike(at: Vector2) -> void:
 		if lethal:
 			_finish(true, "Souris éliminée en %d coups  ·  Bruit %d %%" % [_proie.hits + _misses, roundi(_noise)])
 			return
+	elif _proie.tail_hit_test(at):
+		# Coup réussi côté bruit, mais sans dégât : la souris perd juste sa queue.
+		_noise += noise_per_hit
+		_proie.lose_tail(self)
+		_spawn_griffe(at)
+		_pop_text("SNIP !", at)
 	else:
 		_misses += 1
 		_noise += noise_per_miss
@@ -397,6 +433,26 @@ func _spawn_griffe(at: Vector2) -> void:
 	tween.tween_interval(0.15)
 	tween.tween_property(g, "modulate:a", 0.0, 0.35)
 	tween.tween_callback(g.queue_free)
+
+
+func _pop_text(text: String, at: Vector2) -> void:
+	var l := _make_label(40, COL_CREAM)
+	l.text = text
+	l.add_theme_color_override("font_outline_color", COL_DARK)
+	l.add_theme_constant_override("outline_size", 10)
+	l.size = Vector2(240, 50)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.position = at - Vector2(120, 90)
+	l.pivot_offset = l.size * 0.5
+	l.rotation = randf_range(-0.2, 0.2)
+	l.scale = Vector2.ONE * 0.4
+	add_child(l)
+	move_child(l, _paw.get_index() + 1)
+	var tween := l.create_tween()
+	tween.tween_property(l, "scale", Vector2.ONE, 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(l, "position:y", l.position.y - 40, 0.8)
+	tween.tween_property(l, "modulate:a", 0.0, 0.25)
+	tween.tween_callback(l.queue_free)
 
 
 func _finish(won: bool, message: String) -> void:

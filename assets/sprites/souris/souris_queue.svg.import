@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b43wpbigk88y4"
-path="res://.godot/imported/souris.svg-3afff49662a2457c5b5160f15180a203.ctex"
+uid="uid://d1osfb42s6p5l"
+path="res://.godot/imported/souris_queue.svg-7f7a9f4c98f2af2e2cd138410aaf384f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/souris/souris.svg"
-dest_files=["res://.godot/imported/souris.svg-3afff49662a2457c5b5160f15180a203.ctex"]
+source_file="res://assets/sprites/souris/souris_queue.svg"
+dest_files=["res://.godot/imported/souris_queue.svg-7f7a9f4c98f2af2e2cd138410aaf384f.ctex"]
 
 [params]
 
