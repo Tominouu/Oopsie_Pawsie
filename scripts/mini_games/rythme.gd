@@ -12,12 +12,16 @@ const GRIFFE_TEX := preload("res://assets/sprites/rythme/griffe.png")
 const PATTE_TEX := preload("res://assets/sprites/rythme/patte.png")
 
 const SCREEN := Vector2(1280, 720)
-const HIT_X := 230.0
+const HIT_X := 320.0
 ## Tolérance en pixels autour de la zone de frappe pour taper/attraper une note.
 const TAP_WINDOW := 50.0
 const TAP_HIT_RADIUS := 46.0
+const NOTE_SCALE := 1.6
+## Les lignes (HOLD) gardent un grossissement plus léger : à NOTE_SCALE, leur tracé
+## déborderait de l'écran avant la fin de la griffure.
+const HOLD_NOTE_SCALE := 1.15
 ## Distance max curseur ↔ bille pendant une griffure maintenue.
-const HOLD_TOLERANCE := 75.0
+const HOLD_TOLERANCE := 115.0
 const SPAWN_MARGIN := 170.0
 const LANE_MIN_Y := 140.0
 const LANE_MAX_Y := 560.0
@@ -55,6 +59,8 @@ var _miss_flash := 0.0
 
 var _paw: Sprite2D
 var _paw_base_scale := Vector2.ONE
+var _paw_tip_offset := Vector2.ZERO
+var _paw_tween: Tween
 
 var _info_label: Label
 var _overlay: ColorRect
@@ -66,24 +72,23 @@ func _ready() -> void:
 	randomize()
 	_time_left = time_limit
 	_travel_time = (SCREEN.x + SPAWN_MARGIN - HIT_X) / note_speed
+	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	_build_paw()
 	_build_ui(get_viewport_rect().size)
 	_generate_chart()
 
 
-func _build_paw() -> void:
-	var claw := Sprite2D.new()
-	claw.texture = GRIFFE_TEX
-	claw.position = Vector2(60, 470)
-	claw.rotation = -0.35
-	claw.modulate.a = 0.35
-	add_child(claw)
+func _exit_tree() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
+
+func _build_paw() -> void:
 	_paw = Sprite2D.new()
 	_paw.texture = PATTE_TEX
-	_paw.position = Vector2(140, 560)
-	_paw_base_scale = Vector2.ONE * 0.3
+	_paw_base_scale = Vector2.ONE * 0.42
 	_paw.scale = _paw_base_scale
+	_paw.z_index = 10
+	_paw_tip_offset = Vector2(0, PATTE_TEX.get_height() * 0.5 * _paw_base_scale.y)
 	add_child(_paw)
 
 
@@ -163,6 +168,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _try_press(p: Vector2) -> void:
+	_paw_set_pressed(true)
 	if _active_hold != null:
 		return
 	var best: Note = null
@@ -171,7 +177,7 @@ func _try_press(p: Vector2) -> void:
 		if n.judge != Note.Judge.APPROACHING or absf(n.position.x - HIT_X) > TAP_WINDOW:
 			continue
 		var d := p.distance_to(n.position)
-		if d <= TAP_HIT_RADIUS and d < best_dist:
+		if d <= TAP_HIT_RADIUS * NOTE_SCALE and d < best_dist:
 			best = n
 			best_dist = d
 	if best == null:
@@ -186,6 +192,7 @@ func _try_press(p: Vector2) -> void:
 
 
 func _try_release() -> void:
+	_paw_set_pressed(false)
 	if _active_hold == null or _active_hold.judge != Note.Judge.HOLDING:
 		return
 	_register_miss()
@@ -197,6 +204,12 @@ func _try_release() -> void:
 # --- Boucle ------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	var mouse := get_local_mouse_position()
+	if _active_hold != null:
+		var target := _active_hold.target_world_position()
+		_paw.position = Vector2(target.x, mouse.y) + _paw_tip_offset
+	else:
+		_paw.position = mouse + _paw_tip_offset
 	if _state != State.PLAYING:
 		return
 	_elapsed += delta
@@ -226,11 +239,12 @@ func _spawn_note(data: Dictionary) -> void:
 	n.position = Vector2(SCREEN.x + SPAWN_MARGIN, data.lane_y)
 	if data.kind == Note.Kind.TAP:
 		n.texture = POINT_TEX
+		n.scale = Vector2.ONE * NOTE_SCALE
 	else:
 		n.texture = LIGNE_TEX
-		n.ball_texture = POINT_TEX
 		n.hold_duration = data.hold_duration
 		n.curve_points = PackedVector2Array(CURVE_POINTS)
+		n.scale = Vector2.ONE * HOLD_NOTE_SCALE
 	add_child(n)
 	_notes.append(n)
 	_total += 1
@@ -247,13 +261,14 @@ func _update_notes(delta: float) -> void:
 					_register_miss()
 					_despawn(i)
 			Note.Judge.HOLDING:
-				if mouse.distance_to(n.ball_world_position()) > HOLD_TOLERANCE:
+				if absf(mouse.y - n.target_world_position().y) > HOLD_TOLERANCE:
 					_register_miss()
 					_active_hold = null
 					_despawn(i)
 			Note.Judge.RESOLVED:
 				_register_hit(n.position)
 				_active_hold = null
+				_paw_set_pressed(false)
 				_despawn(i)
 
 
@@ -270,7 +285,6 @@ func _register_hit(at: Vector2) -> void:
 	_combo += 1
 	_best_combo = maxi(_best_combo, _combo)
 	_score += 100 + _combo * 5
-	_pulse_paw()
 	_spawn_griffe(at)
 
 
@@ -279,11 +293,12 @@ func _register_miss() -> void:
 	_miss_flash = 1.0
 
 
-func _pulse_paw() -> void:
-	var tween := _paw.create_tween()
-	tween.tween_property(_paw, "scale", _paw_base_scale * 1.18, 0.07) \
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(_paw, "scale", _paw_base_scale, 0.18)
+func _paw_set_pressed(pressed: bool) -> void:
+	if _paw_tween:
+		_paw_tween.kill()
+	_paw_tween = _paw.create_tween()
+	_paw_tween.tween_property(_paw, "scale", _paw_base_scale * (0.8 if pressed else 1.0), 0.09) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 func _spawn_griffe(at: Vector2) -> void:

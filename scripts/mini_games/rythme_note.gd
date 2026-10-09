@@ -15,19 +15,6 @@ var hold_duration := 1.0
 var hold_elapsed := 0.0
 ## Points locaux (repère de la note) approximant la trace de ligne.png, du début à la fin.
 var curve_points: PackedVector2Array = PackedVector2Array()
-var ball_texture: Texture2D
-
-var _ball: Sprite2D
-
-
-func _ready() -> void:
-	if kind == Kind.HOLD:
-		_ball = Sprite2D.new()
-		_ball.texture = ball_texture
-		_ball.scale = Vector2.ONE * 0.45
-		_ball.z_index = 1
-		add_child(_ball)
-		_ball.position = curve_point_local(0.0)
 
 
 func advance(delta: float) -> void:
@@ -36,8 +23,6 @@ func advance(delta: float) -> void:
 			position.x -= speed * delta
 		Judge.HOLDING:
 			hold_elapsed += delta
-			if _ball:
-				_ball.position = curve_point_local(hold_progress())
 			if hold_elapsed >= hold_duration:
 				judge = Judge.RESOLVED
 
@@ -64,5 +49,5 @@ func curve_point_local(t: float) -> Vector2:
 	return curve_points[i].lerp(curve_points[i + 1], f - i)
 
 
-func ball_world_position() -> Vector2:
+func target_world_position() -> Vector2:
 	return to_global(curve_point_local(hold_progress()))
