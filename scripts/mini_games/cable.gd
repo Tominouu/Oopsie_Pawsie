@@ -1,11 +1,13 @@
 extends Node2D
-## Oopsie Pawsie — mini-jeu façon Docteur Maboule.
+## Oopsie Pawsie — mini-jeu façon Docteur Maboule (maquette Figma « MINI JEU - DOCTEUR MABOULE »).
 ## Maintenir CLIC GAUCHE sur la patte-prise, la guider dans le couloir sans toucher
 ## les bords. Arriver au bout débranche le câble : c'est gagné.
 
 enum State { IDLE, DRAGGING, LOST, WON }
 
 const SCREEN := Vector2(1280, 720)
+const HEADER_H := 116.0
+const BOARD_RECT := Rect2(46, 119, 1188, 552)
 const HALF_WIDTH := 34.0    # demi-largeur du couloir
 const PLUG_RADIUS := 11.0   # rayon de contact de la prise (= taille dessinée)
 const GRAB_RADIUS := 30.0   # tolérance pour attraper la prise
@@ -21,18 +23,35 @@ const PATH_POINTS := [
 	Vector2(780, 620), Vector2(900, 450), Vector2(820, 260), Vector2(1000, 160),
 	Vector2(1160, 260), Vector2(1100, 450), Vector2(1170, 610),
 ]
-const SOCKET_POS := Vector2(48, 620)
 
-const COL_BG := Color("1e1b2e")
-const COL_TRACK := Color("2f2a47")
-const COL_GUIDE := Color(1, 1, 1, 0.07)
-const COL_WALL := Color("e9c46a")
-const COL_WALL_HIT := Color("ff4d4d")
-const COL_PLUG := Color("ff8fab")
-const COL_CABLE := Color("f4f1de")
-const COL_CABLE_DEAD := Color("6c6783")
-const COL_GOAL := Color("57cc99")
-const COL_TEXT := Color("f4f1de")
+const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
+const HEADER_TEX := preload("res://assets/sprites/cable/header.svg")
+const NUIT_TEX := preload("res://assets/sprites/cable/nuit.svg")
+const CHRONO_TEX := preload("res://assets/sprites/cable/chrono.svg")
+const GEAR_TEX := preload("res://assets/sprites/cable/parametres.svg")
+const BOLT_TEX := preload("res://assets/sprites/cable/boulon.svg")
+const PATTE_TEX := preload("res://assets/sprites/cable/patte.svg")
+
+## Ancrage (coussinets) de la patte dans patte.svg, en taille réelle — comme dans
+## le jeu de rythme et le placard, la grosse patte remplace entièrement le curseur.
+const PAW_ANCHOR := Vector2(92.6, 90.0)
+const PAW_ROTATION := -0.6
+## La patte suit la souris directement (c'est le curseur). Le point qu'on guide
+## dans le couloir est décalé par rapport à la patte pour rester toujours visible
+## (relié par un bâton, comme sur la maquette) : c'est LUI qui doit toucher la
+## prise de départ puis slalomer jusqu'à l'arrivée.
+const PIN_OFFSET := Vector2(-159.0, 0.0)
+
+const COL_OUTER := Color("f5c36b")
+const COL_BOARD := Color("393838")
+const COL_TRACK := Color("aeaeae")
+const COL_GUIDE := Color("8e8e8e")
+const COL_WALL_HIT := Color("ff5a52")
+const COL_PLUG := Color("ae2623")
+const COL_CABLE_DEAD := Color("8d8d8d")
+const COL_GOAL := Color("6ce770")
+const COL_CREAM := Color("fff2e4")
+const COL_DARK := Color("2b1710")
 
 var _state := State.IDLE
 var _track := PackedVector2Array()
@@ -47,18 +66,50 @@ var _time := 0.0
 var _shake := 0.0
 var _flash := 0.0
 var _sparks: Array[Dictionary] = []
+var _board_style: StyleBoxFlat
+var _paw: Sprite2D
 
 var _playback: AudioStreamGeneratorPlayback
 var _sound := PackedVector2Array()
 var _sound_idx := 0
 
+var _time_label: Label
+var _stats_label: Label
+
 @onready var _audio: AudioStreamPlayer = $Audio
 
 
 func _ready() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	_build_track()
 	_setup_audio()
+	_build_board_style()
+	_build_hud()
+	_build_paw()
 	_reset()
+
+
+func _exit_tree() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+## La grosse patte remplace le curseur système (même principe que rythme.gd et
+## croquettes.gd) : elle suit la souris en continu, le coussinet est le point
+## qui agrippe/déplace réellement la prise.
+func _build_paw() -> void:
+	_paw = Sprite2D.new()
+	_paw.texture = PATTE_TEX
+	_paw.centered = false
+	_paw.offset = -PAW_ANCHOR
+	_paw.rotation = PAW_ROTATION
+	_paw.z_index = 10
+	add_child(_paw)
+
+
+func _build_board_style() -> void:
+	_board_style = StyleBoxFlat.new()
+	_board_style.bg_color = COL_BOARD
+	_board_style.set_corner_radius_all(24)
 
 
 func _build_track() -> void:
@@ -83,6 +134,78 @@ func _reset() -> void:
 	_message = ""
 
 
+# --- HUD (maquette Figma) ------------------------------------------------------
+
+func _build_hud() -> void:
+	_add_texture(HEADER_TEX, Vector2.ZERO)
+	_add_texture(NUIT_TEX, Vector2(572.75, 24))
+
+	add_child(_make_panel(Rect2(46, 22, 214.272, 69.12), COL_CREAM, 35))
+	_add_texture(CHRONO_TEX, Vector2(68.46, 32.37))
+	_time_label = _make_label(43, COL_DARK)
+	_time_label.position = Vector2(122.03, 24)
+	_time_label.size = Vector2(150, 56)
+	add_child(_time_label)
+
+	_stats_label = _make_label(18, COL_CREAM)
+	_stats_label.position = Vector2(660, 46)
+	_stats_label.size = Vector2(492, 30)
+	_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	add_child(_stats_label)
+
+	_build_gear_button()
+
+
+## Bouton réglages (coin haut droit) : ramène au menu, comme Échap.
+func _build_gear_button() -> void:
+	var rect := Rect2(1172, 22, 68.144, 69.144)
+	add_child(_make_panel(rect, COL_CREAM, 14))
+	var icon_size: Vector2 = GEAR_TEX.get_size() * 0.72
+	_add_texture(GEAR_TEX, rect.position + (rect.size - icon_size) * 0.5, icon_size)
+
+	var btn := Button.new()
+	btn.position = rect.position
+	btn.size = rect.size
+	btn.flat = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.self_modulate = Color(1, 1, 1, 0)
+	btn.pressed.connect(func() -> void:
+		get_tree().change_scene_to_file("res://scenes/menu.tscn"))
+	add_child(btn)
+
+
+func _add_texture(tex: Texture2D, pos: Vector2, size := Vector2.ZERO) -> TextureRect:
+	var t := TextureRect.new()
+	t.texture = tex
+	t.position = pos
+	t.size = size if size != Vector2.ZERO else tex.get_size()
+	t.stretch_mode = TextureRect.STRETCH_SCALE
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(t)
+	return t
+
+
+func _make_panel(rect: Rect2, color: Color, radius: int) -> Panel:
+	var p := Panel.new()
+	p.position = rect.position
+	p.size = rect.size
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.set_corner_radius_all(radius)
+	p.add_theme_stylebox_override("panel", style)
+	return p
+
+
+func _make_label(font_size: int, color: Color) -> Label:
+	var l := Label.new()
+	l.add_theme_font_override("font", FONT)
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", color)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
+
+
 # --- Entrées -----------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -90,7 +213,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		GameManager.back_to_house()
 		return
 
-	var mouse := get_local_mouse_position()
+	var point := _cursor_point()
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if not mb.pressed:
@@ -99,15 +222,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		match _state:
 			State.IDLE:
-				if mb.button_index == MOUSE_BUTTON_LEFT and mouse.distance_to(_plug_pos) <= GRAB_RADIUS:
+				if mb.button_index == MOUSE_BUTTON_LEFT and point.distance_to(_plug_pos) <= GRAB_RADIUS:
 					_state = State.DRAGGING
 					_play(_synth(500.0, 900.0, 0.07, false, 0.25))
 			State.LOST, State.WON:
 				_reset()
 	elif event is InputEventMouseMotion and _state == State.DRAGGING:
-		_move_plug(mouse)
+		_move_plug(point)
 	elif event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_R:
 		_reset()
+
+
+## Position du point guidé dans le couloir : la patte (= souris) + le décalage
+## du bâton. C'est cette position qui doit attraper la prise puis slalomer.
+func _cursor_point() -> Vector2:
+	return get_local_mouse_position() + PIN_OFFSET
 
 
 func _notification(what: int) -> void:
@@ -158,7 +287,7 @@ func _win() -> void:
 	_plug_pos = _end_pos
 	_best = minf(_best, _elapsed)
 	_message = "Câble débranché en %.2f s" % _elapsed
-	_spawn_sparks(SOCKET_POS + Vector2(14, 0), COL_WALL, 30)
+	_spawn_sparks(_track[0], COL_PLUG, 24)
 	_spawn_sparks(_end_pos, COL_GOAL, 30)
 	var jingle := PackedVector2Array()
 	for f in [523.0, 659.0, 784.0, 1047.0]:
@@ -169,6 +298,7 @@ func _win() -> void:
 # --- Boucle ------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	_paw.position = get_local_mouse_position()
 	_time += delta
 	if _state == State.DRAGGING:
 		_elapsed += delta
@@ -181,7 +311,15 @@ func _process(delta: float) -> void:
 		sp.life -= delta
 	_sparks = _sparks.filter(func(sp: Dictionary) -> bool: return sp.life > 0.0)
 	_feed_audio()
+	_update_labels()
 	queue_redraw()
+
+
+func _update_labels() -> void:
+	var secs := int(_elapsed)
+	_time_label.text = "%02d:%02d" % [secs / 60, secs % 60]
+	var best := "—" if _best == INF else "%.2f s" % _best
+	_stats_label.text = "Record : %s   ·   Ratés : %d" % [best, _fails]
 
 
 func _spawn_sparks(at: Vector2, color: Color, count: int) -> void:
@@ -198,10 +336,12 @@ func _spawn_sparks(at: Vector2, color: Color, count: int) -> void:
 func _draw() -> void:
 	var shake := Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 12.0 * _shake
 	draw_set_transform(shake)
-	draw_rect(Rect2(-Vector2(40, 40), SCREEN + Vector2(80, 80)), COL_BG)
+	draw_rect(Rect2(-Vector2(40, 40), SCREEN + Vector2(80, 80)), COL_OUTER)
+	draw_style_box(_board_style, BOARD_RECT)
+	_draw_bolts()
 
-	# Couloir : bordure métallique puis piste.
-	var wall := COL_WALL.lerp(COL_WALL_HIT, _flash)
+	# Couloir : bordure (flash rouge au contact) puis piste.
+	var wall := COL_TRACK.lerp(COL_WALL_HIT, _flash)
 	if _state == State.LOST:
 		wall = COL_WALL_HIT
 	_draw_thick(_track, HALF_WIDTH + 5.0, wall)
@@ -210,12 +350,11 @@ func _draw() -> void:
 
 	# Arrivée.
 	var pulse := 1.0 + 0.08 * sin(_time * 5.0)
-	draw_circle(_end_pos, END_RADIUS * pulse, COL_GOAL.darkened(0.4))
-	draw_circle(_end_pos, END_RADIUS * 0.7 * pulse, COL_GOAL)
-	_text("FIN", _end_pos + Vector2(-40, 7), 80, 18, COL_BG)
+	draw_circle(_end_pos, END_RADIUS * pulse, COL_GOAL.darkened(0.35))
+	draw_circle(_end_pos, END_RADIUS * 0.68 * pulse, COL_GOAL)
 
-	_draw_socket()
 	_draw_cable()
+	_draw_stick()
 	_draw_plug()
 
 	for sp in _sparks:
@@ -225,8 +364,20 @@ func _draw() -> void:
 
 	draw_set_transform(Vector2.ZERO)
 	if _flash > 0.0:
-		draw_rect(Rect2(Vector2.ZERO, SCREEN), Color(1, 0.2, 0.2, 0.25 * _flash))
-	_draw_hud()
+		draw_rect(Rect2(Vector2.ZERO, SCREEN), Color(1, 0.2, 0.2, 0.22 * _flash))
+	_draw_banner()
+
+
+func _draw_bolts() -> void:
+	var inset := 24.0
+	var half := BOLT_TEX.get_size() * 0.5
+	for corner in [
+		BOARD_RECT.position + Vector2(inset, inset),
+		BOARD_RECT.position + Vector2(BOARD_RECT.size.x - inset, inset),
+		BOARD_RECT.position + Vector2(inset, BOARD_RECT.size.y - inset),
+		BOARD_RECT.position + Vector2(BOARD_RECT.size.x - inset, BOARD_RECT.size.y - inset),
+	]:
+		draw_texture(BOLT_TEX, corner - half)
 
 
 func _draw_thick(points: PackedVector2Array, radius: float, color: Color) -> void:
@@ -235,77 +386,74 @@ func _draw_thick(points: PackedVector2Array, radius: float, color: Color) -> voi
 	draw_circle(points[points.size() - 1], radius, color)
 
 
-func _draw_socket() -> void:
-	var rect := Rect2(SOCKET_POS - Vector2(24, 34), Vector2(48, 68))
-	draw_rect(rect, Color("d9d4c7"))
-	draw_rect(rect, Color("8d8778"), false, 3.0)
-	for dy in [-12.0, 12.0]:
-		draw_circle(SOCKET_POS + Vector2(0, dy), 5.0, Color("3a3646"))
-	if _state != State.WON:
-		# Fiche branchée dans la prise murale.
-		draw_rect(Rect2(SOCKET_POS + Vector2(4, -10), Vector2(22, 20)), COL_PLUG.darkened(0.2))
-
-
 func _draw_cable() -> void:
+	if _trail.size() < 1:
+		return
 	var pts := PackedVector2Array()
-	if _state == State.WON:
-		# Débranché : le câble pend mollement côté prise murale.
-		pts.append(SOCKET_POS + Vector2(60, 40))
-	else:
-		pts.append(SOCKET_POS + Vector2(26, 0))
 	pts.append_array(_trail)
 	pts.append(_plug_pos)
-	var col := COL_CABLE_DEAD if _state == State.WON else COL_CABLE
-	draw_polyline(pts, col.darkened(0.5), 8.0, true)
+	if pts.size() < 2:
+		return
+	var col := COL_CABLE_DEAD if _state == State.WON else COL_PLUG
+	draw_polyline(pts, col.darkened(0.3), 8.0, true)
 	draw_polyline(pts, col, 5.0, true)
 
 
+## Bâton reliant le point à la patte : toujours la même longueur (= |PIN_OFFSET|),
+## puisqu'il relie la patte à son décalage fixe, pas au point du couloir.
+func _draw_stick() -> void:
+	var point := _cursor_point()
+	draw_line(_paw.position, point, COL_PLUG.darkened(0.35), 8.0)
+	draw_line(_paw.position, point, COL_PLUG, 5.0)
+
+
 func _draw_plug() -> void:
-	var r := PLUG_RADIUS
 	if _state == State.IDLE:
-		var hover := get_local_mouse_position().distance_to(_plug_pos) <= GRAB_RADIUS
+		var point := _cursor_point()
+		var hover := point.distance_to(_plug_pos) <= GRAB_RADIUS
 		var halo := 0.5 + 0.5 * sin(_time * 6.0)
+		# Cible fixe : la prise de départ, à rejoindre avec le point.
 		draw_arc(_plug_pos, GRAB_RADIUS - 6.0 + halo * 4.0, 0, TAU, 32,
 				Color(COL_PLUG, 0.9 if hover else 0.4), 2.0, true)
-	draw_circle(_plug_pos, r + 2.0, COL_PLUG.darkened(0.45))
-	draw_circle(_plug_pos, r, COL_PLUG)
-	# Empreinte de patte.
-	var s := r / 16.0
-	var paw := Color.WHITE
-	draw_circle(_plug_pos + Vector2(0, 4) * s, 6.0 * s, paw)
-	for off in [Vector2(-7, -4), Vector2(-2.5, -9), Vector2(2.5, -9), Vector2(7, -4)]:
-		draw_circle(_plug_pos + off * s, 2.6 * s, paw)
+		draw_circle(_plug_pos, PLUG_RADIUS * 0.6, COL_PLUG.darkened(0.2))
+		# Le point qu'on contrôle, toujours au bout du bâton.
+		draw_circle(point, PLUG_RADIUS + 2.0, COL_PLUG.darkened(0.45))
+		draw_circle(point, PLUG_RADIUS, COL_PLUG)
+		draw_circle(point, PLUG_RADIUS * 0.35, COL_CREAM)
+		return
+	draw_circle(_plug_pos, PLUG_RADIUS + 2.0, COL_PLUG.darkened(0.45))
+	draw_circle(_plug_pos, PLUG_RADIUS, COL_PLUG)
+	draw_circle(_plug_pos, PLUG_RADIUS * 0.35, COL_CREAM)
 
 
-func _draw_hud() -> void:
-	draw_rect(Rect2(0, 0, SCREEN.x, 64), Color(0, 0, 0, 0.35))
-	_text("Oopsie Pawsie", Vector2(24, 42), 400, 30, COL_PLUG, HORIZONTAL_ALIGNMENT_LEFT)
-	var best := "—" if _best == INF else "%.2f s" % _best
-	var stats := "Temps : %.2f s     Record : %s     Ratés : %d" % [_elapsed, best, _fails]
-	_text(stats, Vector2(SCREEN.x - 624, 40), 600, 20, COL_TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
-
+func _draw_banner() -> void:
 	match _state:
-		State.IDLE:
-			_text("Maintiens CLIC GAUCHE sur la patte et guide le câble jusqu'à la FIN sans toucher les bords   ·   Échap : maison",
-					Vector2(0, SCREEN.y - 22), SCREEN.x, 18, COL_TEXT)
 		State.LOST:
 			_banner("OOPSIE !", _message, COL_WALL_HIT, "Clic pour réessayer  ·  R pour recommencer  ·  Échap : maison")
 		State.WON:
-			_banner("PAWSOME !", _message, COL_GOAL, "Clic pour rejouer  ·  Échap : maison")
+			_banner("PAWSOME !", _message, COL_GOAL, "Clic pour rejouer  ·  Échap : menu")
+		State.IDLE:
+			_hint("Maintiens CLIC GAUCHE sur la patte et guide le câble jusqu'au point vert sans toucher les bords")
+
+
+func _hint(text: String) -> void:
+	var rect := Rect2(SCREEN.x / 2 - 420, SCREEN.y - 40, 840, 30)
+	draw_rect(rect, Color(COL_DARK, 0.55))
+	_text(text, rect.position + Vector2(0, 21), rect.size.x, 16, COL_CREAM)
 
 
 func _banner(title: String, sub: String, color: Color, hint: String) -> void:
 	var rect := Rect2(SCREEN.x / 2 - 300, SCREEN.y / 2 - 100, 600, 200)
-	draw_rect(rect, Color(0, 0, 0, 0.75))
+	draw_rect(rect, Color(COL_DARK, 0.9))
 	draw_rect(rect, color, false, 4.0)
 	_text(title, rect.position + Vector2(0, 70), rect.size.x, 52, color)
-	_text(sub, rect.position + Vector2(0, 118), rect.size.x, 22, COL_TEXT)
-	_text(hint, rect.position + Vector2(0, 168), rect.size.x, 16, Color(COL_TEXT, 0.7))
+	_text(sub, rect.position + Vector2(0, 118), rect.size.x, 22, COL_CREAM)
+	_text(hint, rect.position + Vector2(0, 168), rect.size.x, 16, Color(COL_CREAM, 0.7))
 
 
 func _text(s: String, pos: Vector2, width: float, size: int, color: Color,
 		align := HORIZONTAL_ALIGNMENT_CENTER) -> void:
-	draw_string(ThemeDB.fallback_font, pos, s, align, width, size, color)
+	draw_string(FONT, pos, s, align, width, size, color)
 
 
 # --- Son (généré, aucun fichier audio) ----------------------------------------
