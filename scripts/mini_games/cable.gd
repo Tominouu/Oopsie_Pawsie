@@ -3,7 +3,7 @@ extends Node2D
 ## Maintenir CLIC GAUCHE sur la patte-prise, la guider dans le couloir sans toucher
 ## les bords. Arriver au bout débranche le câble : c'est gagné.
 
-enum State { IDLE, DRAGGING, LOST, WON }
+enum State { INTRO, IDLE, DRAGGING, LOST, WON }
 
 const SCREEN := Vector2(1280, 720)
 const HEADER_H := 116.0
@@ -34,6 +34,7 @@ const CHRONO_TEX := preload("res://assets/sprites/cable/chrono.svg")
 const GEAR_TEX := preload("res://assets/sprites/cable/parametres.svg")
 const BOLT_TEX := preload("res://assets/sprites/cable/boulon.svg")
 const PATTE_TEX := preload("res://assets/sprites/cable/patte.svg")
+const FERMER_TEX := preload("res://assets/sprites/cable/fermer.svg")
 
 ## Ancrage (coussinets) de la patte dans patte.svg, en taille réelle — comme dans
 ## le jeu de rythme et le placard, la grosse patte remplace entièrement le curseur.
@@ -43,7 +44,11 @@ const PAW_ROTATION := -0.6
 ## dans le couloir est décalé par rapport à la patte pour rester toujours visible
 ## (relié par un bâton, comme sur la maquette) : c'est LUI qui doit toucher la
 ## prise de départ puis slalomer jusqu'à l'arrivée.
-const PIN_OFFSET := Vector2(-159.0, 0.0)
+## Attention : le point guidé = souris + ce décalage, donc le point le plus à
+## droite du parcours (~1170 px) doit rester atteignable avec une souris qui ne
+## dépasse pas SCREEN.x (1280) : il faut |PIN_OFFSET.x| < SCREEN.x - 1170, sinon
+## le dernier virage devient impossible à atteindre (échec garanti).
+const PIN_OFFSET := Vector2(-95.0, 0.0)
 
 const COL_OUTER := Color("f5c36b")
 const COL_BOARD := Color("393838")
@@ -55,16 +60,19 @@ const COL_CABLE_DEAD := Color("8d8d8d")
 const COL_GOAL := Color("6ce770")
 const COL_CREAM := Color("fff2e4")
 const COL_DARK := Color("2b1710")
+const COL_BODY_TEXT := Color("6e4d41")
+const COL_CLOSE_BG := Color("d9d9d9")
 
-var _state := State.IDLE
+@export var time_limit := 30.0
+@export var result_delay := 0.6
+
+var _state := State.INTRO
 var _track := PackedVector2Array()
 var _end_pos := Vector2.ZERO
 var _plug_pos := Vector2.ZERO
 var _trail := PackedVector2Array()
-var _fails := 0
+var _time_left := 0.0
 var _elapsed := 0.0
-var _best := INF
-var _message := ""
 var _time := 0.0
 var _shake := 0.0
 var _flash := 0.0
@@ -77,7 +85,10 @@ var _sound := PackedVector2Array()
 var _sound_idx := 0
 
 var _time_label: Label
-var _stats_label: Label
+var _popup: Control
+var _overlay: ColorRect
+var _title_label: Label
+var _sub_label: Label
 
 @onready var _audio: AudioStreamPlayer = $Audio
 
@@ -88,6 +99,8 @@ func _ready() -> void:
 	_setup_audio()
 	_build_board_style()
 	_build_hud()
+	_build_popup()
+	_build_overlay()
 	_build_paw()
 	_reset()
 
@@ -129,12 +142,12 @@ func _build_track() -> void:
 	_end_pos = _track[_track.size() - 1]
 
 
+## Remet le parcours à zéro sans toucher à l'état (IDLE ou INTRO selon l'appelant).
 func _reset() -> void:
-	_state = State.IDLE
 	_plug_pos = _track[0]
 	_trail = PackedVector2Array([_plug_pos])
 	_elapsed = 0.0
-	_message = ""
+	_time_left = time_limit
 
 
 # --- HUD (maquette Figma) ------------------------------------------------------
@@ -146,15 +159,8 @@ func _build_hud() -> void:
 	add_child(_make_panel(Rect2(46, 22, 214.272, 69.12), COL_CREAM, 35))
 	_add_texture(CHRONO_TEX, Vector2(68.46, 32.37))
 	_time_label = _make_label(43, COL_DARK)
-	_time_label.position = Vector2(122.03, 24)
-	_time_label.size = Vector2(150, 56)
+	_time_label.position = Vector2(122.03, 30.64)
 	add_child(_time_label)
-
-	_stats_label = _make_label(18, COL_CREAM)
-	_stats_label.position = Vector2(660, 46)
-	_stats_label.size = Vector2(492, 30)
-	_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	add_child(_stats_label)
 
 	_build_gear_button()
 
@@ -162,9 +168,8 @@ func _build_hud() -> void:
 ## Bouton réglages (coin haut droit) : ramène à la maison, comme Échap.
 func _build_gear_button() -> void:
 	var rect := Rect2(1172, 22, 68.144, 69.144)
-	add_child(_make_panel(rect, COL_CREAM, 14))
-	var icon_size: Vector2 = GEAR_TEX.get_size() * 0.72
-	_add_texture(GEAR_TEX, rect.position + (rect.size - icon_size) * 0.5, icon_size)
+	add_child(_make_panel(rect, COL_CREAM, 6))
+	_add_texture(GEAR_TEX, Vector2(1182.98, 36))
 
 	var btn := Button.new()
 	btn.position = rect.position
@@ -177,14 +182,86 @@ func _build_gear_button() -> void:
 	add_child(btn)
 
 
-func _add_texture(tex: Texture2D, pos: Vector2, size := Vector2.ZERO) -> TextureRect:
+## Pop-up de mission (maquette Figma), même principe que croquettes.gd / souris.gd /
+## scene_aquarium.gd : explique l'objectif avant de commencer, se ferme au premier clic.
+func _build_popup() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 1
+	add_child(layer)
+	_popup = Control.new()
+	_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_popup)
+
+	var box := Panel.new()
+	box.position = Vector2(162, 262)
+	box.size = Vector2(966, 327)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = COL_CREAM
+	style.border_color = COL_DARK
+	style.set_border_width_all(6)
+	style.set_corner_radius_all(18)
+	box.add_theme_stylebox_override("panel", style)
+	_popup.add_child(box)
+
+	var title := _make_label(42, COL_DARK)
+	title.text = "MISSION : DOCTEUR MABOULE"
+	title.position = Vector2(215, 328)
+	title.size = Vector2(860, 45)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_popup.add_child(title)
+
+	var body := _make_label(32, COL_BODY_TEXT)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.custom_minimum_size = Vector2(782, 0)
+	body.text = "Maintiens CLIC GAUCHE sur la patte et guide la prise dans le couloir " \
+		+ "sans toucher les bords, jusqu'au point vert, avant la fin du chrono."
+	body.position = Vector2(254, 400)
+	body.size = Vector2(782, 160)
+	_popup.add_child(body)
+
+	_popup.add_child(_make_panel(Rect2(1075.5, 278.5, 33.66, 33.66), COL_CLOSE_BG, 4))
+	_popup.add_child(_add_texture(FERMER_TEX, Vector2(1081.44, 286.32), false))
+
+
+## Écran de fin (gagné/perdu), même principe que rythme.gd / croquettes.gd / souris.gd :
+## voile sombre plein écran + gros titre + sous-titre, qui s'estompe en fondu.
+func _build_overlay() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 2
+	add_child(layer)
+
+	_overlay = ColorRect.new()
+	_overlay.color = Color(0.0, 0.0, 0.0, 0.7)
+	_overlay.size = SCREEN
+	_overlay.visible = false
+	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_overlay)
+
+	_title_label = _make_label(96, Color.WHITE)
+	_title_label.add_theme_constant_override("outline_size", 10)
+	_title_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.8))
+	_title_label.position = Vector2(0, SCREEN.y * 0.5 - 120)
+	_title_label.size = Vector2(SCREEN.x, 130)
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_overlay.add_child(_title_label)
+
+	_sub_label = _make_label(26, Color.WHITE)
+	_sub_label.position = Vector2(0, SCREEN.y * 0.5 + 20)
+	_sub_label.size = Vector2(SCREEN.x, 50)
+	_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_overlay.add_child(_sub_label)
+
+
+func _add_texture(tex: Texture2D, pos: Vector2, attach := true) -> TextureRect:
 	var t := TextureRect.new()
 	t.texture = tex
 	t.position = pos
-	t.size = size if size != Vector2.ZERO else tex.get_size()
-	t.stretch_mode = TextureRect.STRETCH_SCALE
+	t.size = tex.get_size()
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(t)
+	if attach:
+		add_child(t)
 	return t
 
 
@@ -224,16 +301,28 @@ func _unhandled_input(event: InputEvent) -> void:
 				_lose("Tu as lâché le câble !")
 			return
 		match _state:
+			State.INTRO:
+				_start_game()
 			State.IDLE:
 				if mb.button_index == MOUSE_BUTTON_LEFT and point.distance_to(_plug_pos) <= GRAB_RADIUS:
 					_state = State.DRAGGING
 					_play(_synth(500.0, 900.0, 0.07, false, 0.25))
 			State.LOST, State.WON:
-				_reset()
+				if _overlay.visible:
+					get_tree().reload_current_scene()
 	elif event is InputEventMouseMotion and _state == State.DRAGGING:
 		_move_plug(point)
-	elif event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_R:
+	elif event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_R \
+			and _state != State.INTRO:
 		_reset()
+		_state = State.IDLE
+
+
+func _start_game() -> void:
+	_state = State.IDLE
+	var tween := _popup.create_tween()
+	tween.tween_property(_popup, "modulate:a", 0.0, 0.2)
+	tween.tween_callback(_popup.hide)
 
 
 ## Position du point guidé dans le couloir : la patte (= souris) + le décalage
@@ -301,26 +390,41 @@ func _distance_to_track(p: Vector2) -> float:
 
 
 func _lose(reason: String) -> void:
+	if _state == State.LOST or _state == State.WON:
+		return
 	_state = State.LOST
-	_fails += 1
-	_message = reason
 	_shake = 1.0
 	_flash = 1.0
 	_spawn_sparks(_plug_pos, COL_WALL_HIT, 24)
 	_play(_synth(115.0, 95.0, 0.5, true, 0.18))
+	_finish(false, reason)
 
 
 func _win() -> void:
+	if _state == State.LOST or _state == State.WON:
+		return
 	_state = State.WON
 	_plug_pos = _end_pos
-	_best = minf(_best, _elapsed)
-	_message = "Câble débranché en %.2f s" % _elapsed
 	_spawn_sparks(_track[0], COL_PLUG, 24)
 	_spawn_sparks(_end_pos, COL_GOAL, 30)
 	var jingle := PackedVector2Array()
 	for f in [523.0, 659.0, 784.0, 1047.0]:
 		jingle.append_array(_synth(f, f, 0.11, false, 0.25))
 	_play(jingle)
+	_finish(true, "Câble débranché en %.2f s" % _elapsed)
+
+
+## Affiche l'écran de fin après un court délai (laisse le temps aux étincelles/au
+## son de se jouer), même timing que les autres mini-jeux.
+func _finish(won: bool, message: String) -> void:
+	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
+	_title_label.add_theme_color_override("font_color", COL_GOAL if won else COL_WALL_HIT)
+	var hint := "Clic pour rejouer" if won else "Clic pour réessayer"
+	_sub_label.text = "%s   ·   %s   ·   Échap / B : maison" % [message, hint]
+	await get_tree().create_timer(result_delay).timeout
+	_overlay.modulate.a = 0.0
+	_overlay.visible = true
+	create_tween().tween_property(_overlay, "modulate:a", 1.0, 0.4)
 
 
 # --- Boucle ------------------------------------------------------------------
@@ -331,6 +435,10 @@ func _process(delta: float) -> void:
 	_time += delta
 	if _state == State.DRAGGING:
 		_elapsed += delta
+	if _state == State.IDLE or _state == State.DRAGGING:
+		_time_left = maxf(_time_left - delta, 0.0)
+		if _time_left <= 0.0:
+			_lose("Temps écoulé ! Le câble est resté branché.")
 	_shake = maxf(0.0, _shake - delta * 2.5)
 	_flash = maxf(0.0, _flash - delta * 3.0)
 	for sp in _sparks:
@@ -345,10 +453,7 @@ func _process(delta: float) -> void:
 
 
 func _update_labels() -> void:
-	var secs := int(_elapsed)
-	_time_label.text = "%02d:%02d" % [secs / 60, secs % 60]
-	var best := "—" if _best == INF else "%.2f s" % _best
-	_stats_label.text = "Record : %s   ·   Ratés : %d" % [best, _fails]
+	_time_label.text = "00:%02d" % ceili(_time_left)
 
 
 func _spawn_sparks(at: Vector2, color: Color, count: int) -> void:
@@ -394,7 +499,6 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO)
 	if _flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, SCREEN), Color(1, 0.2, 0.2, 0.22 * _flash))
-	_draw_banner()
 
 
 func _draw_bolts() -> void:
@@ -453,36 +557,6 @@ func _draw_plug() -> void:
 	draw_circle(_plug_pos, PLUG_RADIUS + 2.0, COL_PLUG.darkened(0.45))
 	draw_circle(_plug_pos, PLUG_RADIUS, COL_PLUG)
 	draw_circle(_plug_pos, PLUG_RADIUS * 0.35, COL_CREAM)
-
-
-func _draw_banner() -> void:
-	match _state:
-		State.LOST:
-			_banner("OOPSIE !", _message, COL_WALL_HIT, "Clic pour réessayer  ·  R / Y pour recommencer  ·  Échap / B : maison")
-		State.WON:
-			_banner("PAWSOME !", _message, COL_GOAL, "Clic pour rejouer  ·  Échap / B : maison")
-		State.IDLE:
-			_hint("Maintiens CLIC GAUCHE sur la patte et guide le câble jusqu'au point vert sans toucher les bords")
-
-
-func _hint(text: String) -> void:
-	var rect := Rect2(SCREEN.x / 2 - 420, SCREEN.y - 40, 840, 30)
-	draw_rect(rect, Color(COL_DARK, 0.55))
-	_text(text, rect.position + Vector2(0, 21), rect.size.x, 16, COL_CREAM)
-
-
-func _banner(title: String, sub: String, color: Color, hint: String) -> void:
-	var rect := Rect2(SCREEN.x / 2 - 300, SCREEN.y / 2 - 100, 600, 200)
-	draw_rect(rect, Color(COL_DARK, 0.9))
-	draw_rect(rect, color, false, 4.0)
-	_text(title, rect.position + Vector2(0, 70), rect.size.x, 52, color)
-	_text(sub, rect.position + Vector2(0, 118), rect.size.x, 22, COL_CREAM)
-	_text(hint, rect.position + Vector2(0, 168), rect.size.x, 16, Color(COL_CREAM, 0.7))
-
-
-func _text(s: String, pos: Vector2, width: float, size: int, color: Color,
-		align := HORIZONTAL_ALIGNMENT_CENTER) -> void:
-	draw_string(FONT, pos, s, align, width, size, color)
 
 
 # --- Son (généré, aucun fichier audio) ----------------------------------------
