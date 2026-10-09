@@ -3,6 +3,8 @@ extends Node2D
 ## Le chat se déplace au clavier (ZQSD / WASD / flèches), à la manette (stick gauche / croix)
 ## ou en cliquant au sol. Les objets interactifs s'éclairent au survol ou quand le chat est à côté :
 ## clic dessus (le chat y va tout seul), E / Espace / Entrée ou A à la manette pour lancer le mini-jeu.
+## En poussant contre le lit, le chat saute dedans et se glisse sous la couette : on ne voit plus
+## que la bosse qu'il fait dans le tissu, qu'on déplace pareil. Pousser contre un bord = ressortir.
 
 const Chat := preload("res://scripts/maison_chat.gd")
 
@@ -32,6 +34,22 @@ const INTERACTABLES := [
 	{"layers": ["meuble_tv"], "scene": "res://scenes/mini_games/cable.tscn", "label": "Débrancher la télé"},
 ]
 
+## Le lit : en poussant dedans (ou E / A à côté), le chat saute et se glisse sous la couette.
+const BED_RECT := Rect2(997, 130, 278, 214)
+## Partie du lit couverte par la couette (relevée sur lit.png) : le chat s'y balade dessous.
+const DUVET_RECT := Rect2(1011, 132, 158, 195)
+## Marge (torse ↔ bord de la couette) que le chat garde quand il est dessous.
+const DUVET_MARGIN := 18.0
+## Sous la couette, le chat avance moins vite.
+const BED_SPEED := 0.55
+## Temps à pousser contre le lit (ou contre le bord de la couette) avant de sauter.
+const PUSH_TIME := 0.25
+const JUMP_TIME := 0.4
+## Grossissement du chat en haut du saut (vu de dessus, il se rapproche de la caméra).
+const JUMP_LIFT := 0.35
+## Le chat ne saute hors du lit que vers un endroit libre assez proche, dans le sens poussé.
+const JUMP_OUT_MAX := 170.0
+
 ## Zones où le chat ne peut pas marcher (meubles), relevées sur la maquette.
 const OBSTACLES := [
 	Rect2(0, 0, 1280, 116),        # bandeau
@@ -42,7 +60,7 @@ const OBSTACLES := [
 	Rect2(8, 464, 80, 185),        # étagère
 	Rect2(171, 443, 390, 254),     # table + chaises
 	Rect2(667, 116, 168, 96),      # meuble de l'aquarium
-	Rect2(997, 130, 278, 214),     # lit
+	BED_RECT,                      # lit
 	Rect2(1231, 338, 45, 74),      # table de chevet
 	Rect2(728, 358, 167, 85),      # canapé
 	Rect2(738, 479, 136, 76),      # table basse
@@ -90,6 +108,18 @@ var _quit_hovered := false
 ## Vrai quand la dernière entrée vient de la manette (la bulle affiche alors « A : … »).
 var _using_pad := false
 var _highlight_mat := ShaderMaterial.new()
+
+## Sous la couette, le chat est enfant de ce masque : son ombre ne déborde pas du tissu.
+var _duvet_clip: Polygon2D
+var _in_bed := false
+var _jumping := false
+var _push := 0.0
+var _near_bed := false
+var _bed_hovered := false
+## Point visé sous la couette après un clic (INF = aucun).
+var _bed_target := Vector2.INF
+## Point de la couette cliqué depuis le sol : le chat y saute en arrivant au lit.
+var _bed_pending := Vector2.INF
 
 var _prompt: PanelContainer
 var _prompt_label: Label
@@ -161,6 +191,12 @@ func _build_grid() -> void:
 
 
 func _build_cat() -> void:
+	_duvet_clip = Polygon2D.new()
+	var r := DUVET_RECT
+	_duvet_clip.polygon = PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+	_duvet_clip.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
+	add_child(_duvet_clip)
+
 	_cat = Chat.new()
 	var saved: Vector2 = GameManager.cat_position
 	if saved.is_finite() and _is_walkable(saved):
@@ -311,8 +347,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton and event.pressed:
 		match (event as InputEventJoypadButton).button_index:
 			JOY_BUTTON_A:
-				if not _near.is_empty():
-					_launch(_near)
+				_interact()
 			JOY_BUTTON_START:
 				GameManager.back_to_title()
 		return
@@ -323,8 +358,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_ESCAPE:
 				GameManager.back_to_title()
 			KEY_E, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER:
-				if not _near.is_empty():
-					_launch(_near)
+				_interact()
 		return
 	if not (event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT):
@@ -334,18 +368,60 @@ func _unhandled_input(event: InputEvent) -> void:
 	if QUIT_RECT.has_point(p):
 		GameManager.back_to_title()
 		return
+	if _jumping:
+		return
 	var obj := _object_at(p)
+	if _in_bed:
+		_click_from_bed(p, obj)
+		return
 	if not obj.is_empty():
 		if _near == obj:
 			_launch(obj)
 		else:
 			_walk_to_cell(_reach_cell(obj), obj)
 		return
+	if DUVET_RECT.has_point(p):
+		if _near_bed:
+			_jump_in(p)
+		else:
+			_walk_to_cell(_nearest_free_cell(p), {})
+			_bed_pending = p
+		return
 	if p.y > HEADER_H:
 		_walk_to_cell(_nearest_free_cell(p), {})
 
 
+## Sous la couette : clic dessus = s'y déplacer, clic ailleurs = sauter hors du lit puis y aller.
+func _click_from_bed(p: Vector2, obj: Dictionary) -> void:
+	if DUVET_RECT.has_point(p):
+		var inner := _duvet_inner()
+		_bed_target = p.clamp(inner.position, inner.end)
+		return
+	if p.y <= HEADER_H and obj.is_empty():
+		return
+	var out := _exit_toward((p - _cat.position).normalized())
+	if not out.is_finite():
+		out = _cell_center(_nearest_free_cell(_cat.position))
+	_jump(out, false, func() -> void:
+		if obj.is_empty():
+			_walk_to_cell(_nearest_free_cell(p), {})
+		else:
+			_walk_to_cell(_reach_cell(obj), obj))
+
+
+func _interact() -> void:
+	if _jumping:
+		return
+	if _in_bed:
+		_jump(_cell_center(_nearest_free_cell(_cat.position)), false)
+	elif not _near.is_empty():
+		_launch(_near)
+	elif _near_bed:
+		_jump_in(_cat.position)
+
+
 func _walk_to_cell(target: Vector2i, obj: Dictionary) -> void:
+	_bed_pending = Vector2.INF
 	if target.x < 0:
 		return
 	var from := _nearest_free_cell(_cat.position)
@@ -363,24 +439,143 @@ func _launch(obj: Dictionary) -> void:
 # --- Boucle -------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	var dir := _keyboard_direction()
-	if dir == Vector2.ZERO:
-		dir = _pad_direction()
+	if _jumping:
+		pass
+	elif _in_bed:
+		_process_bed(delta)
+	elif _process_floor(delta):
+		return
+	_update_hover()
+	_update_highlights()
+
+
+## Renvoie vrai si un mini-jeu vient d'être lancé.
+func _process_floor(delta: float) -> bool:
+	var dir := _input_direction()
 	if dir != Vector2.ZERO:
 		_path.clear()
 		_pending = {}
+		_bed_pending = Vector2.INF
 		_cat.walk(_slide(dir * Chat.SPEED * delta), delta)
+		_push = _push + delta if _pushing_bed(dir) else 0.0
+		if _push >= PUSH_TIME:
+			_jump_in(_cat.position + dir * 90.0)
+			return false
 	elif not _path.is_empty():
+		_push = 0.0
 		_follow_path(delta)
 	else:
+		_push = 0.0
 		_cat.idle(delta)
 
 	_update_near()
 	if not _pending.is_empty() and _near == _pending and _path.is_empty():
 		_launch(_pending)
+		return true
+	if _bed_pending.is_finite() and _path.is_empty():
+		var aim := _bed_pending
+		_bed_pending = Vector2.INF
+		if _near_bed:
+			_jump_in(aim)
+	return false
+
+
+## Sous la couette : on se déplace dans les limites du tissu ; pousser contre un bord fait ressortir.
+func _process_bed(delta: float) -> void:
+	var inner := _duvet_inner()
+	var dir := _input_direction()
+	var step := Chat.SPEED * BED_SPEED * delta
+	if dir != Vector2.ZERO:
+		_bed_target = Vector2.INF
+	elif _bed_target.is_finite():
+		var to_target := _bed_target - _cat.position
+		if to_target.length() < 1.0:
+			_bed_target = Vector2.INF
+		else:
+			dir = to_target.normalized()
+			step = minf(step, to_target.length())
+	if dir == Vector2.ZERO:
+		_push = 0.0
+		_cat.idle(delta)
 		return
-	_update_hover()
-	_update_highlights()
+
+	var next := _cat.position + dir * step
+	var held := next.clamp(inner.position, inner.end)
+	if held.distance_to(next) > 0.01 and not _bed_target.is_finite():
+		_push += delta
+		if _push >= PUSH_TIME:
+			var out := _exit_toward(dir)
+			if out.is_finite():
+				_jump(out, false)
+				return
+	else:
+		_push = 0.0
+	_cat.walk(held - _cat.position, delta)
+
+
+func _input_direction() -> Vector2:
+	var dir := _keyboard_direction()
+	return dir if dir != Vector2.ZERO else _pad_direction()
+
+
+func _duvet_inner() -> Rect2:
+	return DUVET_RECT.grow(-DUVET_MARGIN)
+
+
+## Vrai si le chat est collé au lit et avance vers lui.
+func _pushing_bed(dir: Vector2) -> bool:
+	var to_bed := _cat.position.clamp(BED_RECT.position, BED_RECT.end) - _cat.position
+	if to_bed.length() < 0.01 or to_bed.length() > HEAD_OFFSET + HEAD_RADIUS + 8.0:
+		return false
+	return dir.dot(to_bed.normalized()) > 0.6
+
+
+## Endroit libre où atterrir en sautant du lit dans la direction `dir` (INF si rien de proche dans ce sens).
+func _exit_toward(dir: Vector2) -> Vector2:
+	var p := _cell_center(_nearest_free_cell(_cat.position + dir * 120.0))
+	var jump := p - _cat.position
+	if jump.length() > JUMP_OUT_MAX or jump.normalized().dot(dir) < 0.3:
+		return Vector2.INF
+	return p
+
+
+func _jump_in(aim: Vector2) -> void:
+	var inner := _duvet_inner()
+	_jump(aim.clamp(inner.position, inner.end), true)
+
+
+## Saut en arc (le chat grossit en l'air). En entrant, il se glisse sous la couette à
+## l'atterrissage ; en sortant, il ressort de dessous avant de sauter.
+func _jump(to: Vector2, into_bed: bool, on_land := Callable()) -> void:
+	_jumping = true
+	_in_bed = false
+	_push = 0.0
+	_path.clear()
+	_pending = {}
+	_near = {}
+	_near_bed = false
+	_bed_pending = Vector2.INF
+	_bed_target = Vector2.INF
+
+	var tween := create_tween()
+	if not into_bed:
+		tween.tween_method(_cat.set_under, 1.0, 0.0, 0.15)
+		tween.tween_callback(func() -> void: _cat.reparent(self))
+	var from := _cat.position
+	var facing := (to - from).angle() + PI * 0.5
+	var hop := func(t: float) -> void:
+		_cat.position = from.lerp(to, t)
+		_cat.rotation = lerp_angle(_cat.rotation, facing, 0.3)
+		_cat.scale = Vector2.ONE * Chat.TEXTURE_SCALE * _cat.bulk * (1.0 + JUMP_LIFT * sin(t * PI))
+	tween.tween_method(hop, 0.0, 1.0, JUMP_TIME)
+	if into_bed:
+		tween.tween_callback(func() -> void: _cat.reparent(_duvet_clip))
+		tween.tween_method(_cat.set_under, 0.0, 1.0, 0.25)
+	tween.tween_callback(func() -> void:
+		_jumping = false
+		_in_bed = into_bed
+		if on_land.is_valid():
+			on_land.call())
 
 
 func _keyboard_direction() -> Vector2:
@@ -454,17 +649,21 @@ func _update_near() -> void:
 		if d <= best:
 			best = d
 			_near = obj
+	_near_bed = _near.is_empty() and _rect_distance(BED_RECT, _cat.position) <= REACH
 
 
 func _update_hover() -> void:
 	var mouse := get_viewport().get_mouse_position()
 	_hovered = _object_at(mouse)
 	_quit_hovered = QUIT_RECT.has_point(mouse)
+	_bed_hovered = not _in_bed and not _jumping and _hovered.is_empty() and DUVET_RECT.has_point(mouse)
 
-	_tooltip.visible = not _hovered.is_empty() or _quit_hovered
+	_tooltip.visible = not _hovered.is_empty() or _quit_hovered or _bed_hovered
 	if _tooltip.visible:
 		if _quit_hovered:
 			_tooltip_label.text = "Retour au menu"
+		elif _bed_hovered:
+			_tooltip_label.text = "Se glisser sous la couette  ·  %s" % ("clic" if _near_bed else "clic pour y aller")
 		elif _hovered == _near:
 			_tooltip_label.text = "%s  ·  clic" % _hovered.label
 		else:
@@ -476,11 +675,21 @@ func _update_hover() -> void:
 		_tooltip.position = pos
 
 	# Bulle « E : … » au-dessus de l'objet à portée (cachée si la souris le survole déjà).
-	_prompt.visible = not _near.is_empty() and _hovered != _near
+	var text := ""
+	var rect := Rect2()
+	if _in_bed:
+		text = "Sortir du lit"
+		rect = BED_RECT
+	elif not _near.is_empty() and _hovered != _near:
+		text = _near.label
+		rect = _object_rect(_near)
+	elif _near_bed and not _bed_hovered:
+		text = "Se glisser sous la couette"
+		rect = BED_RECT
+	_prompt.visible = text != "" and not _jumping
 	if _prompt.visible:
-		_prompt_label.text = "%s : %s" % ["A" if _using_pad else "E", _near.label]
+		_prompt_label.text = "%s : %s" % ["A" if _using_pad else "E", text]
 		_prompt.reset_size()
-		var rect := _object_rect(_near)
 		var pos := Vector2(rect.get_center().x - _prompt.size.x * 0.5, rect.position.y - _prompt.size.y - 8)
 		if pos.y < HEADER_H + 4:
 			pos.y = rect.end.y + 8
@@ -497,3 +706,5 @@ func _update_highlights() -> void:
 			t.material = _highlight_mat if lit else null
 	var quit: TextureRect = _layers["bouton_quitter"]
 	quit.material = _highlight_mat if _quit_hovered else null
+	var bed: TextureRect = _layers["lit"]
+	bed.material = _highlight_mat if (_near_bed or _bed_hovered) and not _in_bed and not _jumping else null

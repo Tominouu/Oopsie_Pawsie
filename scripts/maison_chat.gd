@@ -16,11 +16,17 @@ const TAIL_TEX := preload("res://assets/sprites/maison/chat_queue.png")
 const TAIL_CUT := 166.0
 const TAIL_PAD := 30.0
 
-## Ondulation : plus forte vers le bout de la queue (t = 0 à la base, 1 au bout).
-const TAIL_SHADER := """
+## Partagé par le corps et la queue.
+## Ondulation (queue) : plus forte vers le bout (t = 0 à la base, 1 au bout).
+## `under` (0 → 1) : le chat est sous la couette, on ne voit plus qu'une ombre floue
+## avec un liseré clair, comme une bosse dans le tissu.
+const CAT_SHADER := """
 shader_type canvas_item;
 uniform float phase = 0.0;
-uniform float amount = 0.3;
+uniform float amount = 0.0;
+uniform float under = 0.0;
+uniform vec4 shadow_color : source_color = vec4(0.07, 0.2, 0.32, 0.65);
+uniform vec4 lift_color : source_color = vec4(0.5, 0.7, 0.86, 0.6);
 // Dans fragment(), COLOR contient déjà la texture : on garde la teinte du sommet à part
 // pour ne pas multiplier la couleur deux fois (ça assombrissait la queue).
 varying vec4 tint;
@@ -31,13 +37,36 @@ void fragment() {
 	float t = UV.y;
 	float wave = sin(phase - t * 4.5) * amount * 22.0 * t * t;
 	vec2 uv = UV - vec2(wave * TEXTURE_PIXEL_SIZE.x, 0.0);
-	COLOR = texture(TEXTURE, uv) * tint;
+	vec4 c = texture(TEXTURE, uv) * tint;
+	if (under > 0.0) {
+		vec2 px = TEXTURE_PIXEL_SIZE * 3.0;
+		float a = 0.0;
+		float a_lit = 0.0;
+		for (int x = -2; x <= 2; x++) {
+			for (int y = -2; y <= 2; y++) {
+				vec2 o = vec2(float(x), float(y)) * px;
+				a += texture(TEXTURE, uv + o).a;
+				a_lit += texture(TEXTURE, uv + o + px * 1.5).a;
+			}
+		}
+		a /= 25.0;
+		a_lit /= 25.0;
+		float rim = clamp(a - a_lit, 0.0, 1.0) * 2.0;
+		vec4 bump = vec4(mix(shadow_color.rgb, lift_color.rgb, clamp(rim, 0.0, 1.0)),
+			max(a * shadow_color.a, rim * lift_color.a));
+		c = mix(c, bump, under);
+	}
+	COLOR = c;
 }
 """
 const WAG_WALK := Vector2(14.0, 1.0)  # (vitesse, amplitude) en marchant
 const WAG_IDLE := Vector2(3.0, 0.35)  # (vitesse, amplitude) à l'arrêt
 
+## Sous la couette, la bosse est un peu plus grosse que le chat.
+var bulk := 1.0
+
 var _walk_time := 0.0
+var _body_mat := ShaderMaterial.new()
 var _tail: Sprite2D
 var _tail_mat := ShaderMaterial.new()
 var _wag_phase := 0.0
@@ -51,7 +80,9 @@ func _ready() -> void:
 	offset = -TORSO / TEXTURE_SCALE
 
 	var shader := Shader.new()
-	shader.code = TAIL_SHADER
+	shader.code = CAT_SHADER
+	_body_mat.shader = shader
+	material = _body_mat
 	_tail_mat.shader = shader
 	_tail = Sprite2D.new()
 	_tail.texture = TAIL_TEX
@@ -72,14 +103,21 @@ func walk(motion: Vector2, delta: float) -> void:
 	rotation = lerp_angle(rotation, motion.angle() + PI * 0.5, minf(1.0, 12.0 * delta))
 	_walk_time += delta
 	var sway := sin(_walk_time * 16.0)
-	scale = Vector2(1.0 + 0.04 * sway, 1.0 - 0.03 * sway) * TEXTURE_SCALE
+	scale = Vector2(1.0 + 0.04 * sway, 1.0 - 0.03 * sway) * TEXTURE_SCALE * bulk
 	_wag(WAG_WALK, delta)
 
 
 func idle(delta: float) -> void:
 	_walk_time = 0.0
-	scale = scale.lerp(Vector2.ONE * TEXTURE_SCALE, minf(1.0, 10.0 * delta))
+	scale = scale.lerp(Vector2.ONE * TEXTURE_SCALE * bulk, minf(1.0, 10.0 * delta))
 	_wag(WAG_IDLE, delta)
+
+
+## 0 = chat normal, 1 = ombre sous la couette.
+func set_under(v: float) -> void:
+	bulk = 1.0 + 0.12 * v
+	_body_mat.set_shader_parameter("under", v)
+	_tail_mat.set_shader_parameter("under", v)
 
 
 func _wag(target: Vector2, delta: float) -> void:
