@@ -149,7 +149,7 @@ func _generate_chart() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
-		get_tree().change_scene_to_file("res://scenes/menu.tscn")
+		GameManager.back_to_house()
 		return
 	if not (event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT):
 		return
@@ -317,7 +317,7 @@ func _spawn_griffe(at: Vector2) -> void:
 
 
 func _update_info() -> void:
-	_info_label.text = "Temps %.1f s   ·   Combo x%d (record x%d)   ·   Score %d   ·   Échap : menu" \
+	_info_label.text = "Temps %.1f s   ·   Combo x%d (record x%d)   ·   Score %d   ·   Échap : maison" \
 		% [_time_left, _combo, _best_combo, _score]
 
 
@@ -332,7 +332,7 @@ func _finish_round() -> void:
 	var won := accuracy >= win_accuracy
 	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = "%d / %d griffures réussies (%.0f%%)   ·   Record combo x%d   ·   Clic pour rejouer   ·   Échap : menu" \
+	_sub_label.text = "%d / %d griffures réussies (%.0f%%)   ·   Record combo x%d   ·   Clic pour rejouer   ·   Échap : maison" \
 		% [_hits, _total, accuracy * 100.0, _best_combo]
 	_overlay.modulate.a = 0.0
 	_overlay.visible = true

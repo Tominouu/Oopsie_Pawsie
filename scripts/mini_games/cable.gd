@@ -87,7 +87,7 @@ func _reset() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
-		get_tree().change_scene_to_file("res://scenes/menu.tscn")
+		GameManager.back_to_house()
 		return
 
 	var mouse := get_local_mouse_position()
@@ -286,12 +286,12 @@ func _draw_hud() -> void:
 
 	match _state:
 		State.IDLE:
-			_text("Maintiens CLIC GAUCHE sur la patte et guide le câble jusqu'à la FIN sans toucher les bords   ·   Échap : menu",
+			_text("Maintiens CLIC GAUCHE sur la patte et guide le câble jusqu'à la FIN sans toucher les bords   ·   Échap : maison",
 					Vector2(0, SCREEN.y - 22), SCREEN.x, 18, COL_TEXT)
 		State.LOST:
-			_banner("OOPSIE !", _message, COL_WALL_HIT, "Clic pour réessayer  ·  R pour recommencer  ·  Échap : menu")
+			_banner("OOPSIE !", _message, COL_WALL_HIT, "Clic pour réessayer  ·  R pour recommencer  ·  Échap : maison")
 		State.WON:
-			_banner("PAWSOME !", _message, COL_GOAL, "Clic pour rejouer  ·  Échap : menu")
+			_banner("PAWSOME !", _message, COL_GOAL, "Clic pour rejouer  ·  Échap : maison")
 
 
 func _banner(title: String, sub: String, color: Color, hint: String) -> void:

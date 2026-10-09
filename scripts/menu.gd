@@ -11,7 +11,7 @@ func _on_playgame_button_pressed() -> void:
 	# Changement de scène immédiat : pas d'await, donc un double clic ne peut plus
 	# relancer change_scene_to_file une fois le menu libéré.
 	_play_click_detached()
-	get_tree().change_scene_to_file("res://scenes/main.tscn")
+	get_tree().change_scene_to_file(GameManager.HOUSE_SCENE)
 
 
 ## Joue le son du clic sur un lecteur attaché à la racine, pour qu'il ne soit

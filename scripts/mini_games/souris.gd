@@ -303,7 +303,7 @@ func _make_label(font_size: int, color: Color) -> Label:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
-		get_tree().change_scene_to_file("res://scenes/menu.tscn")
+		GameManager.back_to_house()
 		return
 	if event is InputEventMouse:
 		# Le viseur suit exactement la position de l'événement (pas de décalage d'une frame).
@@ -461,7 +461,7 @@ func _finish(won: bool, message: String) -> void:
 		_audio.play()
 	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap : menu" % message
+	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap : maison" % message
 	await get_tree().create_timer(result_delay).timeout
 	_overlay.modulate.a = 0.0
 	_overlay.visible = true
