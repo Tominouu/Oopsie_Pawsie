@@ -24,6 +24,9 @@ const MOUSE_RESYNC := 3.0
 ## Position / orientation du chat dans la maison ; INF = pas encore placé (position de la maquette).
 var cat_position := Vector2.INF
 var cat_rotation := 0.0
+## Résultats des mini-jeux de la partie en cours, pour que la maison en garde les traces :
+## { "souris": {"won": déjà gagné au moins une fois, "last": dernier résultat}, ... }
+var results := {}
 
 var _button_click := false
 var _trigger_click := false
@@ -55,10 +58,19 @@ func back_to_house() -> void:
 
 
 func back_to_title() -> void:
-	# Une nouvelle partie repart de la position de la maquette.
+	# Une nouvelle partie repart de la position de la maquette, dans une maison propre.
 	cat_position = Vector2.INF
 	cat_rotation = 0.0
+	results.clear()
 	get_tree().change_scene_to_file(TITLE_SCENE)
+
+
+## Appelé par chaque mini-jeu à sa fin. Une victoire laisse ses traces pour de bon.
+func record_result(game: String, won: bool) -> void:
+	var r: Dictionary = results.get(game, {"won": false})
+	r.won = r.won or won
+	r.last = won
+	results[game] = r
 
 
 # --- Aides à la manette, appelées par les mini-jeux à chaque image ------------------

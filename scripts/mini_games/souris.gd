@@ -563,6 +563,8 @@ func _finish(won: bool, message: String) -> void:
 	_state = State.FINISHED
 	if won:
 		_audio.play()
+	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
+	GameManager.record_result("souris", won)
 	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
 	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap / B : maison" % message

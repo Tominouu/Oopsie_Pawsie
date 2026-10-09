@@ -7,6 +7,7 @@ extends Node2D
 ## que la bosse qu'il fait dans le tissu, qu'on déplace pareil. Pousser contre un bord = ressortir.
 
 const Chat := preload("res://scripts/maison_chat.gd")
+const Traces := preload("res://scripts/maison_traces.gd")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const DIR := "res://assets/sprites/maison/"
@@ -158,12 +159,19 @@ func _build_map() -> void:
 		add_child(t)
 		_layers[entry[0]] = t
 
+	# Traces laissées par les mini-jeux déjà joués (sang, croquettes, télé qui grésille…).
+	var traces := Traces.new()
+	add_child(traces)
+	traces.setup(GameManager.results, _layers)
+
 	# Voile bleu de la nuit (sous le bandeau et le chat, comme dans la maquette).
 	var night := ColorRect.new()
 	night.color = NIGHT_TINT
 	night.size = SCREEN
 	night.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(night)
+	# Ce qui brille (étincelles de la télé) passe au-dessus du voile de nuit.
+	add_child(traces.glow)
 
 	_add_texture(load(DIR + "header.svg"), Vector2.ZERO)
 	_add_texture(load(DIR + "nuit.svg"), Vector2(572.75, 24))

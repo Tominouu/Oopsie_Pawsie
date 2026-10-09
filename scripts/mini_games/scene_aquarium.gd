@@ -656,6 +656,8 @@ func _finish(won: bool, reason: String) -> void:
 	if _state == State.FINISHED:
 		return
 	_state = State.FINISHED
+	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
+	GameManager.record_result("aquarium", won)
 	for f in _fishes:
 		f.set_process(false)
 	if not won:

@@ -420,6 +420,8 @@ func _finish_round() -> void:
 		for i in 8:
 			_fx.burst(Vector2(randf_range(100, 1180), randf_range(200, 650)), 2.0)
 		_shake = 1.0
+	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
+	GameManager.record_result("canape", won)
 	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
 	_sub_label.text = "%d / %d griffures (%.0f%%)  ·  %d PERFECT  ·  Combo max x%d  ·  %d pts   ·   Clic pour rejouer   ·   Échap / B : maison" \

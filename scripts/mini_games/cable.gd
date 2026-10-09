@@ -417,6 +417,8 @@ func _win() -> void:
 ## Affiche l'écran de fin après un court délai (laisse le temps aux étincelles/au
 ## son de se jouer), même timing que les autres mini-jeux.
 func _finish(won: bool, message: String) -> void:
+	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
+	GameManager.record_result("cable", won)
 	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", COL_GOAL if won else COL_WALL_HIT)
 	var hint := "Clic pour rejouer" if won else "Clic pour réessayer"

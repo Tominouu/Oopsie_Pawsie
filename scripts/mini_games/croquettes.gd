@@ -573,6 +573,8 @@ func _finish(won: bool, message: String) -> void:
 	tween.tween_property(_bag, "scale", Vector2.ONE * 1.35, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	if won:
 		_audio.play()
+	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
+	GameManager.record_result("croquettes", won)
 	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
 	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap / B : maison" % message
