@@ -9,6 +9,9 @@ const SCREEN := Vector2(1280, 720)
 const HEADER_H := 116.0
 const BOARD_RECT := Rect2(46, 119, 1188, 552)
 const HALF_WIDTH := 34.0    # demi-largeur du couloir
+## Manette : vitesse du curseur pendant qu'on traîne la prise, et force du recentrage dans le couloir.
+const PAD_DRAG_PRECISION := 0.4
+const PAD_CENTERING := 2.5
 const PLUG_RADIUS := 11.0   # rayon de contact de la prise (= taille dessinée)
 const GRAB_RADIUS := 30.0   # tolérance pour attraper la prise
 const END_RADIUS := 24.0
@@ -156,7 +159,7 @@ func _build_hud() -> void:
 	_build_gear_button()
 
 
-## Bouton réglages (coin haut droit) : ramène au menu, comme Échap.
+## Bouton réglages (coin haut droit) : ramène à la maison, comme Échap.
 func _build_gear_button() -> void:
 	var rect := Rect2(1172, 22, 68.144, 69.144)
 	add_child(_make_panel(rect, COL_CREAM, 14))
@@ -170,7 +173,7 @@ func _build_gear_button() -> void:
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.self_modulate = Color(1, 1, 1, 0)
 	btn.pressed.connect(func() -> void:
-		get_tree().change_scene_to_file("res://scenes/menu.tscn"))
+		GameManager.back_to_house())
 	add_child(btn)
 
 
@@ -264,6 +267,31 @@ func _move_plug(target: Vector2) -> void:
 			return
 
 
+## Aides à la manette (sans effet à la souris) : le curseur est attiré vers la prise
+## pour l'attraper, puis, pendant qu'on la traîne, il va moins vite et se recentre
+## doucement dans le couloir (uniquement sur le côté, il ne fait pas avancer tout seul).
+func _update_pad_assist() -> void:
+	match _state:
+		State.IDLE:
+			GameManager.pad_aim_assist(to_global(_plug_pos - PIN_OFFSET), 70.0)
+		State.DRAGGING:
+			GameManager.set_pad_precision(PAD_DRAG_PRECISION)
+			var center := _closest_on_track(_cursor_point())
+			GameManager.pad_pull(to_global(center - PIN_OFFSET), PAD_CENTERING)
+
+
+func _closest_on_track(p: Vector2) -> Vector2:
+	var best := p
+	var best_d := INF
+	for i in _track.size() - 1:
+		var c := Geometry2D.get_closest_point_to_segment(p, _track[i], _track[i + 1])
+		var d := p.distance_squared_to(c)
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
+
 func _distance_to_track(p: Vector2) -> float:
 	var best := INF
 	for i in _track.size() - 1:
@@ -299,6 +327,7 @@ func _win() -> void:
 
 func _process(delta: float) -> void:
 	_paw.position = get_local_mouse_position()
+	_update_pad_assist()
 	_time += delta
 	if _state == State.DRAGGING:
 		_elapsed += delta
@@ -429,9 +458,9 @@ func _draw_plug() -> void:
 func _draw_banner() -> void:
 	match _state:
 		State.LOST:
-			_banner("OOPSIE !", _message, COL_WALL_HIT, "Clic pour réessayer  ·  R pour recommencer  ·  Échap : maison")
+			_banner("OOPSIE !", _message, COL_WALL_HIT, "Clic pour réessayer  ·  R / Y pour recommencer  ·  Échap / B : maison")
 		State.WON:
-			_banner("PAWSOME !", _message, COL_GOAL, "Clic pour rejouer  ·  Échap : menu")
+			_banner("PAWSOME !", _message, COL_GOAL, "Clic pour rejouer  ·  Échap / B : maison")
 		State.IDLE:
 			_hint("Maintiens CLIC GAUCHE sur la patte et guide le câble jusqu'au point vert sans toucher les bords")
 

@@ -26,3 +26,10 @@ func _play_click_detached() -> void:
 
 func _on_easteregg_pressed() -> void:
 	$clickSound.play()
+
+
+## Manette : A ou Start lance la partie, comme le bouton « Jouer ».
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventJoypadButton and event.pressed \
+			and (event as InputEventJoypadButton).button_index in [JOY_BUTTON_A, JOY_BUTTON_START]:
+		_on_playgame_button_pressed()

@@ -46,6 +46,8 @@ const CLOSE_RECT := Rect2(1075.5, 278.5, 33.66, 33.66)
 const CLOSE_MARGIN := 12.0
 
 const HIT_RADIUS := 55.0
+## Manette : rayon autour du corps où l'aide à la visée agit.
+const PAD_ASSIST_RADIUS := 90.0
 const STRIKE_COOLDOWN := 0.22
 const NOISE_MAX := 100.0
 
@@ -69,6 +71,8 @@ const LOSE_COLOR := Color(0.95, 0.30, 0.30)
 @export var result_delay := 0.9
 
 var _state := State.INTRO
+## Vrai quand la pop-up vient d'être fermée avec A : le clic simulé qui suit ne doit pas compter.
+var _skip_next_click := false
 var _time_left := 0.0
 var _noise := 0.0
 var _noise_shown := 0.0
@@ -308,8 +312,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouse:
 		# Le viseur suit exactement la position de l'événement (pas de décalage d'une frame).
 		_viseur.position = (event as InputEventMouse).position
+	# Manette : A ou Start ferme la pop-up sans avoir à viser la croix.
+	if _state == State.INTRO and event is InputEventJoypadButton and event.pressed \
+			and (event as InputEventJoypadButton).button_index in [JOY_BUTTON_A, JOY_BUTTON_START]:
+		# Le clic que GameManager simule pour ce même A arrive juste après : on l'ignore.
+		_skip_next_click = (event as InputEventJoypadButton).button_index == JOY_BUTTON_A
+		_start_game()
+		return
 	if not (event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT):
+		return
+	if _skip_next_click:
+		_skip_next_click = false
 		return
 
 	match _state:
@@ -361,6 +375,8 @@ func _process(delta: float) -> void:
 
 	if _state != State.PLAYING:
 		return
+	# Manette : le viseur freine et colle un peu au corps de la souris (sans effet à la souris).
+	GameManager.pad_aim_assist(_proie.body_position(), PAD_ASSIST_RADIUS)
 	_cooldown = maxf(0.0, _cooldown - delta)
 	_time_left = maxf(_time_left - delta, 0.0)
 	_update_time_label()
@@ -461,7 +477,7 @@ func _finish(won: bool, message: String) -> void:
 		_audio.play()
 	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap : maison" % message
+	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap / B : maison" % message
 	await get_tree().create_timer(result_delay).timeout
 	_overlay.modulate.a = 0.0
 	_overlay.visible = true

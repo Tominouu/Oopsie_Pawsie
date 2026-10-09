@@ -74,6 +74,8 @@ const LOSE_COLOR := Color(0.95, 0.30, 0.30)
 @export var result_delay := 0.4
 
 var _state := State.INTRO
+## Vrai quand la pop-up vient d'être fermée avec A : le clic simulé qui suit ne doit pas compter.
+var _skip_next_click := false
 var _time_left := 0.0
 var _fishes: Array[Fish] = []
 var _target: Fish
@@ -342,8 +344,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouse:
 		# Le viseur suit exactement la position de l'événement (pas de décalage d'une frame).
 		_viseur.position = (event as InputEventMouse).position
+	# Manette : A ou Start ferme la pop-up sans avoir à viser la croix.
+	if _state == State.INTRO and event is InputEventJoypadButton and event.pressed \
+			and (event as InputEventJoypadButton).button_index in [JOY_BUTTON_A, JOY_BUTTON_START]:
+		# Le clic que GameManager simule pour ce même A arrive juste après : on l'ignore.
+		_skip_next_click = (event as InputEventJoypadButton).button_index == JOY_BUTTON_A
+		_start_game()
+		return
 	if not (event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT):
+		return
+	if _skip_next_click:
+		_skip_next_click = false
 		return
 
 	var p: Vector2 = make_input_local(event).position
@@ -426,7 +438,7 @@ func _finish(won: bool, reason: String) -> void:
 	await get_tree().create_timer(result_delay).timeout
 	_title_label.text = "RÉUSSITE !" if won else "ÉCHEC"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = reason + "   ·   Échap : maison"
+	_sub_label.text = reason + "   ·   Échap / B : maison"
 	_overlay.modulate.a = 0.0
 	_overlay.visible = true
 	create_tween().tween_property(_overlay, "modulate:a", 1.0, 0.4)

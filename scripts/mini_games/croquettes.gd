@@ -201,6 +201,8 @@ func _build_popup() -> void:
 	var box := Panel.new()
 	box.position = Vector2(162, 262)
 	box.size = Vector2(966, 327)
+	# Sinon le Panel avale les clics (souris ou A à la manette) faits dans la pop-up.
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
 	style.bg_color = COL_CREAM
 	style.border_color = COL_DARK
@@ -416,7 +418,7 @@ func _finish(won: bool, message: String) -> void:
 		_audio.play()
 	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap : maison" % message
+	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap / B : maison" % message
 	await get_tree().create_timer(result_delay).timeout
 	_overlay.modulate.a = 0.0
 	_overlay.visible = true

@@ -317,7 +317,7 @@ func _spawn_griffe(at: Vector2) -> void:
 
 
 func _update_info() -> void:
-	_info_label.text = "Temps %.1f s   ·   Combo x%d (record x%d)   ·   Score %d   ·   Échap : maison" \
+	_info_label.text = "Temps %.1f s   ·   Combo x%d (record x%d)   ·   Score %d   ·   Échap / B : maison" \
 		% [_time_left, _combo, _best_combo, _score]
 
 
@@ -332,7 +332,7 @@ func _finish_round() -> void:
 	var won := accuracy >= win_accuracy
 	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = "%d / %d griffures réussies (%.0f%%)   ·   Record combo x%d   ·   Clic pour rejouer   ·   Échap : maison" \
+	_sub_label.text = "%d / %d griffures réussies (%.0f%%)   ·   Record combo x%d   ·   Clic pour rejouer   ·   Échap / B : maison" \
 		% [_hits, _total, accuracy * 100.0, _best_combo]
 	_overlay.modulate.a = 0.0
 	_overlay.visible = true

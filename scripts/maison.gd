@@ -1,8 +1,8 @@
 extends Node2D
 ## Oopsie Pawsie — la maison (maquette Figma « MAP - Nuit »), hub du jeu.
-## Le chat se déplace au clavier (ZQSD / WASD / flèches) ou en cliquant au sol.
-## Les objets interactifs s'éclairent au survol ou quand le chat est à côté :
-## clic dessus (le chat y va tout seul) ou E / Espace / Entrée pour lancer le mini-jeu.
+## Le chat se déplace au clavier (ZQSD / WASD / flèches), à la manette (stick gauche / croix)
+## ou en cliquant au sol. Les objets interactifs s'éclairent au survol ou quand le chat est à côté :
+## clic dessus (le chat y va tout seul), E / Espace / Entrée ou A à la manette pour lancer le mini-jeu.
 
 const Chat := preload("res://scripts/maison_chat.gd")
 
@@ -61,6 +61,7 @@ const HEAD_RADIUS := 8.0
 ## Distance max (bord de l'objet ↔ torse du chat) pour pouvoir interagir.
 const REACH := CAT_RADIUS + 34.0
 const CELL := 10
+const PAD_DEADZONE := 0.25
 
 const QUIT_RECT := Rect2(10, 655, 62, 60)
 const NIGHT_TINT := Color(0, 29.0 / 255.0, 56.0 / 255.0, 0.17)
@@ -72,8 +73,8 @@ const HIGHLIGHT_SHADER := """
 shader_type canvas_item;
 uniform float amount = 0.2;
 void fragment() {
-	vec4 c = texture(TEXTURE, UV) * COLOR;
-	COLOR = vec4(mix(c.rgb, vec3(1.0), amount), c.a);
+	// COLOR contient déjà la texture : ne pas la remultiplier.
+	COLOR.rgb = mix(COLOR.rgb, vec3(1.0), amount);
 }
 """
 
@@ -86,6 +87,8 @@ var _pending: Dictionary = {}
 var _near: Dictionary = {}
 var _hovered: Dictionary = {}
 var _quit_hovered := false
+## Vrai quand la dernière entrée vient de la manette (la bulle affiche alors « A : … »).
+var _using_pad := false
 var _highlight_mat := ShaderMaterial.new()
 
 var _prompt: PanelContainer
@@ -159,7 +162,6 @@ func _build_grid() -> void:
 
 func _build_cat() -> void:
 	_cat = Chat.new()
-	_cat.texture = load(DIR + "chat.png")
 	var saved: Vector2 = GameManager.cat_position
 	if saved.is_finite() and _is_walkable(saved):
 		_cat.position = saved
@@ -303,6 +305,19 @@ func _reach_cell(obj: Dictionary) -> Vector2i:
 # --- Entrées -----------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Manette (Xbox) : A = interagir, Start = retour au menu.
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		_using_pad = true
+	if event is InputEventJoypadButton and event.pressed:
+		match (event as InputEventJoypadButton).button_index:
+			JOY_BUTTON_A:
+				if not _near.is_empty():
+					_launch(_near)
+			JOY_BUTTON_START:
+				GameManager.back_to_title()
+		return
+	if event is InputEventKey or event is InputEventMouseButton:
+		_using_pad = false
 	if event is InputEventKey and event.pressed and not event.echo:
 		match (event as InputEventKey).keycode:
 			KEY_ESCAPE:
@@ -349,6 +364,8 @@ func _launch(obj: Dictionary) -> void:
 
 func _process(delta: float) -> void:
 	var dir := _keyboard_direction()
+	if dir == Vector2.ZERO:
+		dir = _pad_direction()
 	if dir != Vector2.ZERO:
 		_path.clear()
 		_pending = {}
@@ -377,6 +394,21 @@ func _keyboard_direction() -> Vector2:
 	if Input.is_physical_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 		d.x += 1
 	return d.normalized()
+
+
+## Stick gauche (analogique : le chat va plus ou moins vite) ou croix directionnelle, sur toutes les manettes.
+func _pad_direction() -> Vector2:
+	for pad in Input.get_connected_joypads():
+		var stick := Vector2(Input.get_joy_axis(pad, JOY_AXIS_LEFT_X), Input.get_joy_axis(pad, JOY_AXIS_LEFT_Y))
+		if stick.length() > PAD_DEADZONE:
+			# Remet l'échelle à 0 au bord de la zone morte pour un démarrage en douceur.
+			return stick.normalized() * clampf((stick.length() - PAD_DEADZONE) / (1.0 - PAD_DEADZONE), 0.0, 1.0)
+		var d := Vector2(
+			int(Input.is_joy_button_pressed(pad, JOY_BUTTON_DPAD_RIGHT)) - int(Input.is_joy_button_pressed(pad, JOY_BUTTON_DPAD_LEFT)),
+			int(Input.is_joy_button_pressed(pad, JOY_BUTTON_DPAD_DOWN)) - int(Input.is_joy_button_pressed(pad, JOY_BUTTON_DPAD_UP)))
+		if d != Vector2.ZERO:
+			return d.normalized()
+	return Vector2.ZERO
 
 
 ## Déplacement qui glisse le long des meubles au lieu de bloquer net.
@@ -446,7 +478,7 @@ func _update_hover() -> void:
 	# Bulle « E : … » au-dessus de l'objet à portée (cachée si la souris le survole déjà).
 	_prompt.visible = not _near.is_empty() and _hovered != _near
 	if _prompt.visible:
-		_prompt_label.text = "E : %s" % _near.label
+		_prompt_label.text = "%s : %s" % ["A" if _using_pad else "E", _near.label]
 		_prompt.reset_size()
 		var rect := _object_rect(_near)
 		var pos := Vector2(rect.get_center().x - _prompt.size.x * 0.5, rect.position.y - _prompt.size.y - 8)

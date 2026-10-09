@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d08cronw37bdv"
-path="res://.godot/imported/chat.png-71ad129cbeeb5e26b8b0aee64de44215.ctex"
+uid="uid://dkkqbtqvigh6l"
+path="res://.godot/imported/chat_queue.png-a08c738da15d283a2b52d638ddccbd59.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/maison/chat.png"
-dest_files=["res://.godot/imported/chat.png-71ad129cbeeb5e26b8b0aee64de44215.ctex"]
+source_file="res://assets/sprites/maison/chat_queue.png"
+dest_files=["res://.godot/imported/chat_queue.png-a08c738da15d283a2b52d638ddccbd59.ctex"]
 
 [params]
 
