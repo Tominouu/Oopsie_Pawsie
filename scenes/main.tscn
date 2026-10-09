@@ -76,3 +76,9 @@ custom_minimum_size = Vector2(360, 72)
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
 text = "🎵  Griffure rythmée"
+
+[node name="SourisButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=308376201]
+custom_minimum_size = Vector2(360, 72)
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "🐭  Élimine l'intrus"
