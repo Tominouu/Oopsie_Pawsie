@@ -1,11 +1,15 @@
 extends Node2D
 ## Oopsie Pawsie — mini-jeu de l'aquarium (maquette Figma « MINI JEU - AQUARIUM »).
-## Parmi tous les poissons rouges se cache un poisson rose : clique dessus avant
-## la fin du chrono. Un mauvais poisson = perdu.
+## Parmi tous les poissons rouges se cache un poisson rose : pêche-le d'un coup de patte
+## avant la fin du chrono. Chaque plouf fait du bruit, et un mauvais poisson (éjecté sur
+## le parquet) encore plus : si la jauge déborde, toute la maison se réveille.
 
 enum State { INTRO, PLAYING, FINISHED }
 
 const Fish := preload("res://scripts/mini_games/fishs_red.gd")
+const Eau := preload("res://scripts/mini_games/aquarium_eau.gd")
+const SON_TEX := preload("res://assets/sprites/aquarium/son.svg")
+const MEOW := preload("res://assets/sounds/meow1.mp3")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const FOND_TEX := preload("res://assets/sprites/aquarium/fond_bois.svg")
@@ -60,7 +64,22 @@ const CLOSE_RECT := Rect2(1075.5, 278.5, 33.66, 33.66)
 ## Marge autour de la croix pour la viser sans avoir à être au pixel près.
 const CLOSE_MARGIN := 12.0
 
+## Jauge de bruit : même emplacement et même style que dans le mini-jeu de la souris.
+const GAUGE_RECT := Rect2(1200, 295, 30, 226)
+const NOISE_MAX := 100.0
+## Délai mini entre deux coups de patte (le temps que la patte revienne un peu).
+const DIP_COOLDOWN := 0.3
+## Rayon autour du plouf dans lequel les poissons paniquent.
+const PANIC_RADIUS := 230.0
+## Manette : le viseur freine sur le poisson le plus proche (n'importe lequel, pour ne rien dévoiler).
+const PAD_ASSIST_RADIUS := 60.0
+const DIP_WORDS := ["PLOUF !", "SPLASH !", "BLOUP !", "SPLOUTCH !"]
+const WRONG_WORDS := ["OUPS !", "PAS LUI !", "RATÉ !", "BEURK !"]
+## Où atterrissent les poissons éjectés : bandes de parquet libres autour de l'aquarium.
+const LANDING_ZONES := [Rect2(22, 190, 70, 440), Rect2(170, 684, 700, 20), Rect2(170, 128, 900, 14)]
+
 const COL_WATER := Color("c0d9e1")
+const COL_NOISE := Color("e01518")
 const COL_TANK_BORDER := Color("569da9")
 const COL_CREAM := Color("fff2e4")
 const COL_DARK := Color("2b1710")
@@ -71,7 +90,11 @@ const WIN_COLOR := Color(0.25, 0.85, 0.45)
 const LOSE_COLOR := Color(0.95, 0.30, 0.30)
 
 @export var time_limit := 30.0
-@export var result_delay := 0.4
+@export var result_delay := 0.9
+## Bruit d'un plouf (tout coup de patte dans l'eau), et en plus pour un mauvais poisson attrapé.
+## Avec 8 et 20 : 3 mauvais poissons (+ un plouf dans le vide) passent, le 4e réveille la maison.
+@export var noise_per_dip := 8.0
+@export var noise_per_wrong_fish := 20.0
 
 var _state := State.INTRO
 ## Vrai quand la pop-up vient d'être fermée avec A : le clic simulé qui suit ne doit pas compter.
@@ -94,23 +117,49 @@ var _overlay: ColorRect
 var _title_label: Label
 var _sub_label: Label
 
+var _noise := 0.0
+var _noise_shown := 0.0
+var _wrong_fish := 0
+var _cooldown := 0.0
+var _gauge_fill: Panel
+var _son_icon: TextureRect
+var _eau: Eau
+var _fx_layer: CanvasLayer
+var _flash: ColorRect
+var _shake := 0.0
+var _audio: AudioStreamPlayer
+
 
 func _ready() -> void:
 	randomize()
 	_time_left = time_limit
 	_build_background()
+	# Flaques sur le parquet (sous l'aquarium) ; gouttes en vol au-dessus de l'aquarium.
+	_eau = Eau.new()
+	add_child(_eau)
 	_build_tank()
+	_eau.setup(SCREEN, _water)
+	add_child(_eau.air)
 	_build_paw()
 	_build_hud()
+	_build_gauge()
+	_build_fx()
 	_build_popup()
 	_build_overlay()
 	_build_viseur()
 	_spawn_fishes()
+	# Ronds dans l'eau : au-dessus des poissons, coupés au bord de l'aquarium.
+	_water.add_child(_eau.surface)
+	_audio = AudioStreamPlayer.new()
+	_audio.stream = MEOW
+	add_child(_audio)
 	_update_time_label()
 
 
 func _exit_tree() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Si on quitte pendant un arrêt sur image, le jeu ne doit pas rester au ralenti.
+	Engine.time_scale = 1.0
 
 
 # --- Construction (ordre = ordre des calques de la maquette) ------------------
@@ -185,6 +234,28 @@ func _build_hud() -> void:
 	_add_texture(REGLAGES_TEX, Vector2(1182.98, 36))
 
 
+func _build_gauge() -> void:
+	# Icône haut-parleur : le SVG déborde de ~2 px autour du groupe de la maquette de la souris.
+	_son_icon = _add_texture(SON_TEX, Vector2(1188, 235) - Vector2(2.07, 2.07))
+	_son_icon.pivot_offset = _son_icon.size * 0.5
+	add_child(_make_panel(GAUGE_RECT, COL_CREAM, 15))
+	_gauge_fill = _make_panel(Rect2(GAUGE_RECT.position.x, GAUGE_RECT.end.y, GAUGE_RECT.size.x, 0), COL_NOISE, 15)
+	add_child(_gauge_fill)
+
+
+## Calque d'effets plein écran : flash et gouttes d'eau « sur la caméra ».
+func _build_fx() -> void:
+	_fx_layer = CanvasLayer.new()
+	_fx_layer.layer = 1
+	add_child(_fx_layer)
+	_flash = ColorRect.new()
+	_flash.color = Color(0.85, 0.95, 1.0)
+	_flash.size = SCREEN
+	_flash.modulate.a = 0.0
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fx_layer.add_child(_flash)
+
+
 func _build_popup() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 1
@@ -217,9 +288,10 @@ func _build_popup() -> void:
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.custom_minimum_size = Vector2(716, 0)
-	body.text = "Hidden among all these goldfish is one pink fish. Find it within the time limit."
+	body.text = "Hidden among all these goldfish is one pink fish. Fish it out in time, " \
+		+ "but every splash makes noise!"
 	body.position = Vector2(287, 421)
-	body.size = Vector2(716, 74)
+	body.size = Vector2(716, 120)
 	_popup.add_child(body)
 
 	# Bouton fermer : fond + croix regroupés pour réagir au survol.
@@ -364,7 +436,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _is_over_close(p):
 				_start_game()
 		State.PLAYING:
-			_try_catch(p)
+			if _cooldown <= 0.0:
+				_try_catch(p)
+		State.FINISHED:
+			if _overlay.visible:
+				get_tree().reload_current_scene()
 
 
 func _is_over_close(p: Vector2) -> bool:
@@ -382,17 +458,136 @@ func _try_catch(p: Vector2) -> void:
 	# Seuls les clics dans l'eau comptent.
 	if not Rect2(_water.global_position, _water.size).has_point(p):
 		return
+	_cooldown = DIP_COOLDOWN
 	_swipe_paw(p)
+
 	# On teste d'abord les poissons dessinés au-dessus (les derniers de la liste).
+	var caught: Fish = null
 	for i in range(_fishes.size() - 1, -1, -1):
-		var f := _fishes[i]
-		if not f.contains_point(p):
-			continue
-		if f.is_target:
-			_finish(true, "Tu as trouvé le poisson rose en %.1f s." % (time_limit - _time_left))
-		else:
-			_finish(false, "Ce n'était pas le bon poisson.")
+		if _fishes[i].contains_point(p):
+			caught = _fishes[i]
+			break
+
+	_noise += noise_per_dip
+	if caught != null and caught.is_target:
+		_catch_target(caught, p)
+		_finish(true, "Poisson rose pêché en %.1f s  ·  Bruit %d %%" % [time_limit - _time_left, roundi(_noise)])
 		return
+
+	# Plouf : gerbe d'eau, et tous les poissons du coin s'affolent.
+	_eau.splash(p, 1.0)
+	_shake = maxf(_shake, 0.35)
+	var local := p - _water.global_position
+	for f in _fishes:
+		if f != caught:
+			f.panic(local, PANIC_RADIUS)
+
+	if caught != null:
+		_wrong_fish += 1
+		_noise += noise_per_wrong_fish
+		_fling_fish(caught, p)
+		_shake = maxf(_shake, 0.7)
+		_flash_screen(0.25)
+		_hit_stop(0.06)
+		_pop_text(WRONG_WORDS.pick_random(), p)
+		Eau.screen_splats(_fx_layer, 1 + _wrong_fish, SCREEN)
+	else:
+		_pop_text(DIP_WORDS.pick_random(), p)
+
+	if _noise >= NOISE_MAX:
+		_finish(false, "Trop de bruit : toute la maison est réveillée !")
+
+
+## Mauvais poisson : éjecté hors de l'aquarium, il atterrit sur le parquet et y gigote.
+func _fling_fish(f: Fish, from: Vector2) -> void:
+	_fishes.erase(f)
+	f.set_process(false)
+	f.reparent(self)
+	move_child(f, _paw.get_index())
+	var zone: Rect2 = LANDING_ZONES.pick_random()
+	var land := zone.position + Vector2(randf() * zone.size.x, randf() * zone.size.y)
+	var spins := randf_range(1.5, 3.0) * (1.0 if randf() < 0.5 else -1.0)
+	var start_rot := f.rotation
+	var fly := f.create_tween()
+	# Vu de dessus : le poisson « monte » (grossit) puis retombe, en tournoyant et en semant des gouttes.
+	fly.tween_method(func(t: float) -> void:
+		f.global_position = from.lerp(land, t)
+		f.scale = Vector2.ONE * (1.0 + 0.9 * sin(PI * t))
+		f.rotation = start_rot + spins * TAU * t
+		if randf() < 0.5:
+			_eau.dribble(f.global_position), 0.0, 1.0, 0.6)
+	fly.tween_callback(func() -> void:
+		_eau.splash(land, 0.35)
+		_pop_text("FLOP !", land)
+		_flop(f))
+
+
+## Le poisson échoué saute et se tortille sur le parquet jusqu'à la fin de la partie.
+func _flop(f: Fish) -> void:
+	var base_y := f.position.y
+	var tw := f.create_tween().set_loops()
+	tw.tween_property(f, "rotation", randf_range(0.3, 0.6), 0.12)
+	tw.parallel().tween_property(f, "position:y", base_y - 10.0, 0.12).set_ease(Tween.EASE_OUT)
+	tw.tween_property(f, "rotation", -randf_range(0.3, 0.6), 0.12)
+	tw.parallel().tween_property(f, "position:y", base_y, 0.12).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void: f.flip_h = not f.flip_h)
+	tw.tween_interval(randf_range(0.1, 0.5))
+
+
+## Bon poisson : énorme gerbe d'eau, il s'envole vers le chat qui le gobe.
+func _catch_target(f: Fish, from: Vector2) -> void:
+	_fishes.erase(f)
+	f.set_process(false)
+	f.reparent(self)
+	move_child(f, get_child_count() - 1)
+	_eau.splash(from, 3.5)
+	Eau.screen_splats(_fx_layer, 7, SCREEN)
+	_shake = 1.5
+	_flash_screen(0.5)
+	_hit_stop(0.18)
+	_pop_text("GOTCHA !", from)
+	var local := from - _water.global_position
+	for other in _fishes:
+		other.panic(local, PANIC_RADIUS * 2.0)
+	var fly := f.create_tween()
+	fly.tween_property(f, "scale", Vector2.ONE * 2.4, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	fly.parallel().tween_property(f, "rotation", f.rotation + TAU * 2.0, 0.6)
+	fly.parallel().tween_property(f, "global_position", _paw_rest, 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	fly.tween_property(f, "scale", Vector2.ZERO, 0.12)
+	fly.tween_callback(func() -> void:
+		_pop_text("MIAM !", _paw_rest)
+		_audio.play())
+
+
+func _flash_screen(strength: float) -> void:
+	_flash.modulate.a = strength
+	_flash.create_tween().tween_property(_flash, "modulate:a", 0.0, 0.3)
+
+
+## Arrêt sur image : le jeu se fige une fraction de seconde pour donner du poids au coup.
+func _hit_stop(duration: float) -> void:
+	Engine.time_scale = 0.05
+	await get_tree().create_timer(duration, true, false, true).timeout
+	Engine.time_scale = 1.0
+
+
+func _pop_text(text: String, at: Vector2) -> void:
+	var l := _make_label(40, COL_CREAM)
+	l.text = text
+	l.add_theme_color_override("font_outline_color", COL_DARK)
+	l.add_theme_constant_override("outline_size", 10)
+	l.size = Vector2(260, 50)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.position = at - Vector2(130, 90)
+	l.pivot_offset = l.size * 0.5
+	l.rotation = randf_range(-0.2, 0.2)
+	l.scale = Vector2.ONE * 0.4
+	add_child(l)
+	var tween := l.create_tween()
+	tween.tween_property(l, "scale", Vector2.ONE, 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(l, "position:y", l.position.y - 40, 0.8)
+	tween.tween_property(l, "modulate:a", 0.0, 0.25)
+	tween.tween_callback(l.queue_free)
 
 
 func _swipe_paw(at: Vector2) -> void:
@@ -415,12 +610,42 @@ func _process(delta: float) -> void:
 		_close_btn.scale = Vector2.ONE * (1.2 if hover else 1.0)
 		_close_cross.modulate = LOSE_COLOR if hover else Color.WHITE
 		return
+
+	# Tremblement de l'écran après un plouf.
+	_shake = move_toward(_shake, 0.0, 3.0 * delta)
+	position = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 16.0 * _shake * _shake
+
+	_noise_shown = move_toward(_noise_shown, _noise, 120.0 * delta)
+	var h := GAUGE_RECT.size.y * clampf(_noise_shown / NOISE_MAX, 0.0, 1.0)
+	_gauge_fill.position.y = GAUGE_RECT.end.y - h
+	_gauge_fill.size.y = h
+	_gauge_fill.visible = h > 0.5
+	if _noise >= NOISE_MAX * 0.7 and _state == State.PLAYING:
+		_son_icon.scale = Vector2.ONE * (1.0 + 0.08 * sin(Time.get_ticks_msec() * 0.02))
+	else:
+		_son_icon.scale = Vector2.ONE
+
 	if _state != State.PLAYING:
 		return
+	_assist_pad()
+	_cooldown = maxf(0.0, _cooldown - delta)
 	_time_left = maxf(_time_left - delta, 0.0)
 	_update_time_label()
 	if _time_left <= 0.0:
-		_finish(false, "Temps écoulé !")
+		_finish(false, "Temps écoulé : le poisson rose t'a échappé !")
+
+
+## Manette : le viseur freine sur le poisson le plus proche, quel qu'il soit (rien n'est dévoilé).
+func _assist_pad() -> void:
+	var best: Fish = null
+	var best_d := PAD_ASSIST_RADIUS * 1.5
+	for f in _fishes:
+		var d := f.global_position.distance_to(_viseur.position)
+		if d < best_d:
+			best_d = d
+			best = f
+	if best != null:
+		GameManager.pad_aim_assist(best.global_position, PAD_ASSIST_RADIUS)
 
 
 func _update_time_label() -> void:
@@ -433,12 +658,14 @@ func _finish(won: bool, reason: String) -> void:
 	_state = State.FINISHED
 	for f in _fishes:
 		f.set_process(false)
-	_target.reveal()
+	if not won:
+		# Montre où se cachait le poisson rose.
+		_target.reveal()
 
 	await get_tree().create_timer(result_delay).timeout
-	_title_label.text = "RÉUSSITE !" if won else "ÉCHEC"
+	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
 	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = reason + "   ·   Échap / B : maison"
+	_sub_label.text = reason + "   ·   Clic pour rejouer   ·   Échap / B : maison"
 	_overlay.modulate.a = 0.0
 	_overlay.visible = true
 	create_tween().tween_property(_overlay, "modulate:a", 1.0, 0.4)

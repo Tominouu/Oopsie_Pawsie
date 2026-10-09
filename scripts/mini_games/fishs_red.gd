@@ -23,6 +23,10 @@ func _process(delta: float) -> void:
 		if absf(velocity.x) < min_x:
 			velocity.x = (min_x if velocity.x >= 0.0 else -min_x)
 
+	# Après une panique, le poisson ralentit peu à peu jusqu'à sa vitesse normale.
+	if velocity.length() > base_speed * 1.3:
+		velocity = velocity.move_toward(velocity.normalized() * base_speed, 260.0 * delta)
+
 	position += velocity * delta
 
 	if position.x < bounds.position.x:
@@ -45,6 +49,17 @@ func _process(delta: float) -> void:
 	var tilt := clampf(atan2(velocity.y, absf(velocity.x)) * dir, -0.5, 0.5)
 	var wobble := sin(Time.get_ticks_msec() / 1000.0 * 9.0 + _phase) * 0.05
 	rotation = lerp_angle(rotation, tilt + wobble, minf(1.0, 6.0 * delta))
+
+
+## Fuite affolée loin de `from` (même repère que `position`) : plus le poisson est près, plus il file vite.
+func panic(from: Vector2, radius: float) -> void:
+	var away := position - from
+	var d := away.length()
+	if d > radius:
+		return
+	var dir := away / d if d > 0.01 else Vector2.from_angle(randf() * TAU)
+	velocity = dir.rotated(randf_range(-0.4, 0.4)) * base_speed * lerpf(5.0, 2.0, d / radius)
+	_turn_timer = randf_range(0.6, 1.0)
 
 
 func contains_point(global_point: Vector2) -> bool:
