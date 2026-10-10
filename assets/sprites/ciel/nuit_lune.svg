@@ -1,0 +1,14 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="133.5" height="66.7501" viewBox="0 0 133.5 66.7501" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="lune">
+<path id="Subtract" d="M62.5301 19.25C56.603 22.0389 52.5 28.0647 52.5 35.049C52.5 44.6869 60.3131 52.5 69.951 52.5C76.3226 52.5 81.8963 49.0852 84.9426 43.9861C82.3389 45.6144 79.2615 46.5556 75.9642 46.5556C66.599 46.5556 59.007 38.9636 59.007 29.5984C59.0071 25.7023 60.3212 22.1133 62.5301 19.25Z" fill="#F8C128" style="fill:#F8C128;fill:color(display-p3 0.9731 0.7550 0.1553);fill-opacity:1;"/>
+<circle id="Ellipse 14" cx="68.8785" cy="48.5952" r="0.676796" fill="#DFA60B" style="fill:#DFA60B;fill:color(display-p3 0.8731 0.6514 0.0420);fill-opacity:1;"/>
+<circle id="Ellipse 15" cx="56.4256" cy="39.9322" r="0.676796" fill="#DFA60B" style="fill:#DFA60B;fill:color(display-p3 0.8731 0.6514 0.0420);fill-opacity:1;"/>
+<circle id="Ellipse 16" cx="57.2376" cy="35.6007" r="0.676796" fill="#DFA60B" style="fill:#DFA60B;fill:color(display-p3 0.8731 0.6514 0.0420);fill-opacity:1;"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_11" x1="66.75" y1="8.10623e-05" x2="66.75" y2="133.5" gradientUnits="userSpaceOnUse">
+<stop offset="0.0001" stop-color="#272757" style="stop-color:#272757;stop-color:color(display-p3 0.1529 0.1529 0.3412);stop-opacity:1;"/>
+<stop offset="0.336538" stop-color="#4D2E6D" style="stop-color:#4D2E6D;stop-color:color(display-p3 0.3018 0.1786 0.4279);stop-opacity:1;"/>
+</linearGradient>
+</defs>
+</svg>

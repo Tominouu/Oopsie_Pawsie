@@ -1,0 +1,19 @@
+Sons des dossiers assets/sounds/sfx et assets/sounds/musique — tous sous licence CC0 (domaine public).
+Aucune attribution n'est obligatoire, mais merci quand même aux auteurs :
+
+Kenney (www.kenney.nl) — CC0
+  - Impact Sounds   : pas_* (impactGeneric_light), patte_sol_*, coup_*, conserve_*, carton_*, farine, toc, flop_*, bzzt_metal
+  - Interface Sounds: lancer_jeu, survol, popup_fermer, griffe_*, note_ratee
+  - RPG Audio       : froissement_*, swipe_*, snip, dechirure, sac, jackpot_1, prise, debranche
+  - Casino Audio    : chips_*, pates, cereales, jackpot_2
+  - Digital Audio   : tele_zap_*
+  - Music Jingles   : victoire_* (pizzicato 02, 04, 10), defaite_* (pizzicato 01, 05, 14), combo (hit 11)
+
+rubberduck — « 40 CC0 water / splash / slime SFX » (opengameart.org) — CC0
+  - plouf_*, grosse_gerbe_*, bulles_*, ambiance_bulles
+
+EZduzziteh — « Squish Sounds Effects » (opengameart.org) — CC0
+  - gicle_* (squish_01 à 06), ecrasement (squishsplat_impact), eclatement (squishpop)
+
+pmiller — « Calm Track » (opengameart.org) — CC0
+  - musique/maison_calme.ogg (calm_track-loop)

@@ -13,7 +13,6 @@ const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const POINT_TEX := preload("res://assets/sprites/rythme/point.png")
 const PATTE_TEX := preload("res://assets/sprites/rythme/patte.png")
 const HEADER_TEX := preload("res://assets/sprites/rythme/header.svg")
-const NUIT_TEX := preload("res://assets/sprites/rythme/nuit.svg")
 const CHRONO_TEX := preload("res://assets/sprites/rythme/chrono.svg")
 ## Mouchetures du tissu, exportées de Figma puis rendues transparentes autour (le fond reste celui du jeu).
 const TEXTURE_TEX := preload("res://assets/sprites/rythme/texture.png")
@@ -128,7 +127,8 @@ func _build_ui() -> void:
 	add_child(layer)
 	# Bandeau du haut, comme dans les autres mini-jeux.
 	_add_texture(layer, HEADER_TEX, Vector2.ZERO)
-	_add_texture(layer, NUIT_TEX, Vector2(572.75, 24))
+	# Le dôme nuit → jour qui montre le temps qui reste (voir ciel.gd).
+	layer.add_child(preload("res://scripts/ciel.gd").new())
 	layer.add_child(_make_panel(Rect2(46, 22, 214.272, 69.12), COL_CREAM, 35))
 	_add_texture(layer, CHRONO_TEX, Vector2(68.46, 32.37))
 	_time_label = _make_label(43, COL_DARK)
@@ -335,6 +335,10 @@ func _register_hit(n: Note) -> void:
 	var power: float = judge.power
 	_fx.scratch(n.position, 0.8 + 0.25 * power)
 	_fx.burst(n.position, power)
+	# Griffe dans le tissu ; un PERFECT déchire carrément.
+	Sons.play("griffe")
+	if judge == JUDGES[0]:
+		Sons.play("dechirure")
 	_zone_pulse = 1.0
 	_shake = maxf(_shake, 0.25 * power)
 	_pop_text(judge.text, n.position + Vector2(0, -70), judge.color, 34 if judge != JUDGES[0] else 42)
@@ -351,12 +355,14 @@ func _register_miss(n: Note) -> void:
 	_miss_flash = 1.0
 	_shake = maxf(_shake, 0.3)
 	_pop_text("RATÉ !", n.position + Vector2(0, -60), Color("c8c8c8"), 30)
+	Sons.play("note_ratee")
 	n.crumble()
 
 
 ## Tous les COMBO_STEP coups : bannière, flash, gerbe de rembourrage.
 func _combo_banner() -> void:
 	_pop_text("COMBO x%d !" % _combo, Vector2(SCREEN.x * 0.55, 330), Color("ffd23f"), 72)
+	Sons.play("combo")
 	_shake = maxf(_shake, 0.8)
 	_miss_flash = 0.0
 	for i in 3:
@@ -422,14 +428,9 @@ func _finish_round() -> void:
 		_shake = 1.0
 	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
 	GameManager.record_result("canape", won)
-	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
-	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = "%d / %d griffures (%.0f%%)  ·  %d PERFECT  ·  Combo max x%d  ·  %d pts   ·   Clic pour rejouer   ·   Échap / B : maison" \
-		% [_hits, _total, accuracy * 100.0, _perfects, _best_combo, _score]
-	await get_tree().create_timer(0.8).timeout
-	_overlay.modulate.a = 0.0
-	_overlay.visible = true
-	create_tween().tween_property(_overlay, "modulate:a", 1.0, 0.4)
+	Sons.play("victoire" if won else "defaite")
+	# Victoire : retour fluide à la maison. Défaite : écran « OOPSIE / TRY AGAIN ».
+	GameManager.end_mini_game(won)
 
 
 # --- Dessin ------------------------------------------------------------------

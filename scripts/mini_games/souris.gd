@@ -11,7 +11,6 @@ const Sang := preload("res://scripts/mini_games/souris_sang.gd")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const HEADER_TEX := preload("res://assets/sprites/souris/header.svg")
-const NUIT_TEX := preload("res://assets/sprites/souris/nuit.svg")
 const SOURIS_TEX := preload("res://assets/sprites/souris/souris_corps.svg")
 const QUEUE_TEX := preload("res://assets/sprites/souris/souris_queue.svg")
 const PATTE_TEX := preload("res://assets/sprites/souris/patte.svg")
@@ -152,7 +151,8 @@ func _build_fx() -> void:
 
 func _build_hud_back() -> void:
 	_add_texture(HEADER_TEX, Vector2.ZERO)
-	_add_texture(NUIT_TEX, Vector2(572.75, 24))
+	# Le dôme nuit → jour qui montre le temps qui reste (voir ciel.gd).
+	add_child(preload("res://scripts/ciel.gd").new())
 
 
 func _build_proie() -> void:
@@ -372,6 +372,7 @@ func _is_over_close(p: Vector2) -> bool:
 
 
 func _start_game() -> void:
+	Sons.play("popup_fermer")
 	_state = State.PLAYING
 	var tween := _popup.create_tween()
 	tween.tween_property(_popup, "modulate:a", 0.0, 0.2)
@@ -440,6 +441,7 @@ func _strike(at: Vector2) -> void:
 	# Le sang gicle dans le sens du coup (la patte arrive de sa position de repos).
 	var swing := at - _paw.position
 	_animate_paw(Vector2(at.x, maxf(at.y, HEADER_H)))
+	Sons.play("swipe")
 
 	var hit := at.distance_to(_proie.body_position()) <= HIT_RADIUS
 	if hit:
@@ -460,9 +462,12 @@ func _strike(at: Vector2) -> void:
 		_sang.splash(at, swing, 0.5)
 		_shake = maxf(_shake, 0.3)
 		_pop_text("SNIP !", at)
+		Sons.play("snip")
+		Sons.play("gicle", -6.0)
 	else:
 		_misses += 1
 		_noise += noise_per_miss
+		Sons.play("patte_sol")
 
 	if _noise >= NOISE_MAX:
 		_finish(false, "Trop de bruit : la souris s'est enfuie !")
@@ -472,6 +477,10 @@ func _strike(at: Vector2) -> void:
 func _hit_fx(at: Vector2, swing: Vector2) -> void:
 	var power := 1.0 + 0.3 * (_proie.hits - 1)
 	_sang.splash(at, swing, power)
+	Sons.play("coup")
+	Sons.play("gicle", 2.0 * (_proie.hits - 1))
+	if _proie.hits >= 3:
+		Sons.play("ecrasement", -6.0)
 	_shake = maxf(_shake, 0.55 + 0.1 * _proie.hits)
 	_flash_screen(0.22)
 	_hit_stop(0.06)
@@ -485,6 +494,10 @@ func _kill_fx(at: Vector2, swing: Vector2) -> void:
 	var body := _proie.body_position()
 	_sang.splash(at, swing, 3.5)
 	_sang.pool(body, 70.0)
+	Sons.play("coup", 3.0)
+	Sons.play("ecrasement")
+	Sons.play("eclatement")
+	Sons.play("gicle", 4.0)
 	_shake = 1.6
 	_flash_screen(0.5)
 	Sang.screen_splats(_fx_layer, 7, SCREEN)
@@ -495,6 +508,7 @@ func _kill_fx(at: Vector2, swing: Vector2) -> void:
 		if not is_inside_tree():
 			return
 		_sang.splash(body + Vector2(randf_range(-25, 25), randf_range(-25, 25)), Vector2.from_angle(randf() * TAU), 1.6)
+		Sons.play("gicle", -3.0)
 		_shake = maxf(_shake, 0.9)
 
 
@@ -565,13 +579,9 @@ func _finish(won: bool, message: String) -> void:
 		_audio.play()
 	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
 	GameManager.record_result("souris", won)
-	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
-	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap / B : maison" % message
-	await get_tree().create_timer(result_delay).timeout
-	_overlay.modulate.a = 0.0
-	_overlay.visible = true
-	create_tween().tween_property(_overlay, "modulate:a", 1.0, 0.4)
+	Sons.play("victoire" if won else "defaite")
+	# Victoire : retour fluide à la maison. Défaite : écran « OOPSIE / TRY AGAIN ».
+	GameManager.end_mini_game(won)
 
 
 # --- Dessin ------------------------------------------------------------------

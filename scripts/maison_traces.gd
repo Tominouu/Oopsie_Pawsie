@@ -227,6 +227,7 @@ func _spawn_arc() -> void:
 	var pop := randf() < POP_CHANCE * _tv_level
 	if pop:
 		_pops.append({"p": b, "t": 0.0})
+		Sons.play("tele_zap", -4.0 if _tv_level >= 1.0 else -10.0)
 	for k in int((3 + 5 * _tv_level) * (3.0 if pop else 1.0)):
 		_sparks.append({"p": b, "v": Vector2.from_angle(randf_range(-PI, 0.0)) * randf_range(60.0, 260.0 if pop else 220.0),
 			"t": randf_range(0.2, 0.45)})

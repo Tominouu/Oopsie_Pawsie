@@ -13,7 +13,6 @@ const SON_TEX := preload("res://assets/sprites/croquettes/son.svg")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const HEADER_TEX := preload("res://assets/sprites/croquettes/header.svg")
-const NUIT_TEX := preload("res://assets/sprites/croquettes/nuit.svg")
 const CHRONO_TEX := preload("res://assets/sprites/croquettes/chrono.svg")
 const FERMER_TEX := preload("res://assets/sprites/croquettes/fermer.svg")
 const PATTE_TEX := preload("res://assets/sprites/croquettes/patte.svg")
@@ -31,16 +30,16 @@ const PRODUCTS: Array[Texture2D] = [
 	preload("res://assets/sprites/croquettes/sac_poisson.svg"),
 ]
 const CHIPS_INDEX := 1
-## Pour chaque produit (même ordre que PRODUCTS) : son contenu, le bruit qu'il fait en tombant
+## Pour chaque produit (même ordre que PRODUCTS) : son contenu, le son joué (voir sons.gd), le bruit qu'il fait en tombant
 ## (multiplie noise_per_item) et ses onomatopées.
 const PRODUCT_FX := [
-	{"kind": "cereales", "noise": 1.0, "words": ["CRAC !", "SCRITCH !"]},
-	{"kind": "chips", "noise": 1.25, "words": ["CRUNCH !", "CROUNCH !"]},
-	{"kind": "mais", "noise": 2.5, "words": ["CLANG !", "BONG !"]},
-	{"kind": "pois", "noise": 2.5, "words": ["CLONG !", "BANG !"]},
-	{"kind": "farine", "noise": 0.75, "words": ["POUF !", "PFFF !"]},
-	{"kind": "pates", "noise": 1.0, "words": ["CRAC CRAC !", "CLIC !"]},
-	{"kind": "poisson", "noise": 1.0, "words": ["LEURRE !", "BEURK !"]},
+	{"kind": "cereales", "sound": "cereales", "noise": 1.0, "words": ["CRAC !", "SCRITCH !"]},
+	{"kind": "chips", "sound": "chips", "noise": 1.25, "words": ["CRUNCH !", "CROUNCH !"]},
+	{"kind": "mais", "sound": "conserve", "noise": 2.5, "words": ["CLANG !", "BONG !"]},
+	{"kind": "pois", "sound": "conserve", "noise": 2.5, "words": ["CLONG !", "BANG !"]},
+	{"kind": "farine", "sound": "farine", "noise": 0.75, "words": ["POUF !", "PFFF !"]},
+	{"kind": "pates", "sound": "pates", "noise": 1.0, "words": ["CRAC CRAC !", "CLIC !"]},
+	{"kind": "poisson", "sound": "sac", "noise": 1.0, "words": ["LEURRE !", "BEURK !"]},
 ]
 
 ## Jauge de bruit : même emplacement et même style que dans le mini-jeu de la souris.
@@ -150,7 +149,8 @@ func _exit_tree() -> void:
 
 func _build_hud_back() -> void:
 	_add_texture(HEADER_TEX, Vector2.ZERO)
-	_add_texture(NUIT_TEX, Vector2(572.75, 24))
+	# Le dôme nuit → jour qui montre le temps qui reste (voir ciel.gd).
+	add_child(preload("res://scripts/ciel.gd").new())
 
 
 func _fill_shelves() -> void:
@@ -377,6 +377,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _start_game() -> void:
+	Sons.play("popup_fermer")
 	_state = State.PLAYING
 	var tween := _popup.create_tween()
 	tween.tween_property(_popup, "modulate:a", 0.0, 0.2)
@@ -439,6 +440,7 @@ func _strike(at: Vector2) -> void:
 		_noise += noise_per_tap
 		_shake = maxf(_shake, 0.15)
 		_pop_text("TOC !", at, 28)
+		Sons.play("toc")
 		if _noise >= noise_max:
 			_finish(false, "Trop de bruit : les humains se réveillent !")
 
@@ -456,6 +458,9 @@ func _throw(item: Item, at: Vector2) -> void:
 	var fx: Dictionary = PRODUCT_FX[maxi(PRODUCTS.find(item.texture), 0)]
 	var kind: String = fx.kind
 	_debris.burst(center, kind, 1.0, Vector2(-dir.x, -0.6))
+	Sons.play(fx.sound)
+	if kind == "cereales" or kind == "pates":
+		Sons.play("carton", -4.0)
 	_noise += noise_per_item * float(fx.noise)
 	_pop_text((fx.words as Array).pick_random(), at)
 	_shake = maxf(_shake, 0.25 + 0.2 * float(fx.noise))
@@ -487,6 +492,8 @@ func _jackpot(bag: Item, at: Vector2) -> void:
 	_flash_screen(0.45)
 	_hit_stop(0.18)
 	_pop_text("JACKPOT !", at, 52)
+	Sons.play("jackpot")
+	Sons.play("sac", 2.0)
 	for i in 3:
 		await get_tree().create_timer(0.12, true, false, true).timeout
 		if not is_inside_tree():
@@ -494,6 +501,7 @@ func _jackpot(bag: Item, at: Vector2) -> void:
 		_debris.burst(center + Vector2(randf_range(-30, 30), randf_range(-20, 10)), "croquettes", 1.8, \
 			Vector2.from_angle(randf_range(-PI, 0.0)))
 		_shake = maxf(_shake, 0.8)
+		Sons.play("jackpot", -4.0)
 
 
 func _flash_screen(strength: float) -> void:
@@ -575,13 +583,9 @@ func _finish(won: bool, message: String) -> void:
 		_audio.play()
 	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
 	GameManager.record_result("croquettes", won)
-	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
-	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = "%s   ·   Clic pour rejouer   ·   Échap / B : maison" % message
-	await get_tree().create_timer(result_delay).timeout
-	_overlay.modulate.a = 0.0
-	_overlay.visible = true
-	create_tween().tween_property(_overlay, "modulate:a", 1.0, 0.4)
+	Sons.play("victoire" if won else "defaite")
+	# Victoire : retour fluide à la maison. Défaite : écran « OOPSIE / TRY AGAIN ».
+	GameManager.end_mini_game(won)
 
 
 # --- Dessin ------------------------------------------------------------------

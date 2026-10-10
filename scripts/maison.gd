@@ -8,6 +8,8 @@ extends Node2D
 
 const Chat := preload("res://scripts/maison_chat.gd")
 const Traces := preload("res://scripts/maison_traces.gd")
+const Ciel := preload("res://scripts/ciel.gd")
+const EcranFin := preload("res://scripts/ecran_fin.gd")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const DIR := "res://assets/sprites/maison/"
@@ -26,13 +28,13 @@ const LAYERS := [
 	["plante", Vector2(907, 613)],
 ]
 
-## Objets qui lancent un mini-jeu : calques concernés, scène, texte affiché.
+## Objets qui lancent un mini-jeu (une « mission ») : nom du résultat (GameManager), calques, scène, texte.
 const INTERACTABLES := [
-	{"layers": ["aquarium"], "scene": "res://scenes/mini_games/scene_aquarium.tscn", "label": "Pêcher le poisson rose"},
-	{"layers": ["souris"], "scene": "res://scenes/mini_games/souris.tscn", "label": "Chasser la souris"},
-	{"layers": ["placard_gauche", "placard_droit"], "scene": "res://scenes/mini_games/croquettes.tscn", "label": "Fouiller les placards"},
-	{"layers": ["canape"], "scene": "res://scenes/mini_games/rythme.tscn", "label": "Griffer le canapé"},
-	{"layers": ["meuble_tv"], "scene": "res://scenes/mini_games/cable.tscn", "label": "Débrancher la télé"},
+	{"id": "aquarium", "layers": ["aquarium"], "scene": "res://scenes/mini_games/scene_aquarium.tscn", "label": "Pêcher le poisson rose"},
+	{"id": "souris", "layers": ["souris"], "scene": "res://scenes/mini_games/souris.tscn", "label": "Chasser la souris"},
+	{"id": "croquettes", "layers": ["placard_gauche", "placard_droit"], "scene": "res://scenes/mini_games/croquettes.tscn", "label": "Fouiller les placards"},
+	{"id": "canape", "layers": ["canape"], "scene": "res://scenes/mini_games/rythme.tscn", "label": "Griffer le canapé"},
+	{"id": "cable", "layers": ["meuble_tv"], "scene": "res://scenes/mini_games/cable.tscn", "label": "Débrancher la télé"},
 ]
 
 ## Le lit : en poussant dedans (ou E / A à côté), le chat saute et se glisse sous la couette.
@@ -87,6 +89,8 @@ const NIGHT_TINT := Color(0, 29.0 / 255.0, 56.0 / 255.0, 0.17)
 const COL_FLOOR := Color("b19e8a")
 const COL_CREAM := Color("fff2e4")
 const COL_DARK := Color("2b1710")
+## Volume de la musique d'ambiance (dB) : assez bas pour laisser passer les bruitages.
+const MUSIC_DB := -12.0
 ## Surbrillance : éclaircit vers le blanc sans changer la teinte (un modulate > 1 sature les couleurs).
 const HIGHLIGHT_SHADER := """
 shader_type canvas_item;
@@ -126,9 +130,16 @@ var _prompt: PanelContainer
 var _prompt_label: Label
 var _tooltip: PanelContainer
 var _tooltip_label: Label
+var _ui_layer: CanvasLayer
+## Écran de fin de nuit (victoire ou « trop tard ») une fois affiché.
+var _end_screen: CanvasLayer
+var _missions_label: Label
+var _missions_pill: Panel
 
 
 func _ready() -> void:
+	# Musique d'ambiance de la maison (reprend là où elle s'était arrêtée).
+	Sons.play_music("maison_calme", MUSIC_DB)
 	var shader := Shader.new()
 	shader.code = HIGHLIGHT_SHADER
 	_highlight_mat.shader = shader
@@ -136,6 +147,11 @@ func _ready() -> void:
 	_build_grid()
 	_build_cat()
 	_build_ui()
+
+
+func _exit_tree() -> void:
+	# La musique s'arrête en fondu quand on part dans un mini-jeu ou au menu.
+	Sons.stop_music()
 
 
 # --- Construction ----------------------------------------------------------------
@@ -174,7 +190,8 @@ func _build_map() -> void:
 	add_child(traces.glow)
 
 	_add_texture(load(DIR + "header.svg"), Vector2.ZERO)
-	_add_texture(load(DIR + "nuit.svg"), Vector2(572.75, 24))
+	# Le dôme nuit → jour qui montre le temps qui reste (voir ciel.gd).
+	add_child(Ciel.new())
 	var gear_bg := Panel.new()
 	gear_bg.position = Vector2(1172, 22)
 	gear_bg.size = Vector2(68.144, 69.144)
@@ -185,6 +202,28 @@ func _build_map() -> void:
 	gear_bg.add_theme_stylebox_override("panel", style)
 	add_child(gear_bg)
 	_add_texture(load(DIR + "reglages.svg"), Vector2(1182.98, 36))
+
+	# Compteur des missions réussies cette nuit (maquette : pastille « 0/5 » en haut à gauche).
+	var pill := Panel.new()
+	_missions_pill = pill
+	pill.position = Vector2(48, 22)
+	pill.size = Vector2(132, 69)
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pill_style := StyleBoxFlat.new()
+	pill_style.bg_color = COL_CREAM
+	pill_style.set_corner_radius_all(35)
+	pill.add_theme_stylebox_override("panel", pill_style)
+	add_child(pill)
+	_missions_label = Label.new()
+	_missions_label.text = "%d/%d" % [GameManager.missions_done(), GameManager.MISSIONS_TOTAL]
+	_missions_label.add_theme_font_override("font", FONT)
+	_missions_label.add_theme_font_size_override("font_size", 43)
+	_missions_label.add_theme_color_override("font_color", COL_DARK)
+	_missions_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_missions_label.position = Vector2(48, 30.64)
+	_missions_label.size = Vector2(132, 52)
+	_missions_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_missions_label)
 
 
 func _build_grid() -> void:
@@ -217,6 +256,7 @@ func _build_cat() -> void:
 
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
+	_ui_layer = layer
 	add_child(layer)
 	_prompt = _make_bubble()
 	_prompt_label = _prompt.get_child(0)
@@ -349,6 +389,11 @@ func _reach_cell(obj: Dictionary) -> Vector2i:
 # --- Entrées -----------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Écran de fin de nuit affiché : il gère lui-même ses touches ; Échap ramène quand même au menu.
+	if _end_screen != null:
+		if event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
+			GameManager.back_to_title()
+		return
 	# Manette (Xbox) : A = interagir, Start = retour au menu.
 	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
 		_using_pad = true
@@ -441,12 +486,71 @@ func _walk_to_cell(target: Vector2i, obj: Dictionary) -> void:
 
 
 func _launch(obj: Dictionary) -> void:
+	# Une mission réussie ne se refait pas : la nuit est comptée.
+	if GameManager.is_mission_done(obj.id):
+		_pending = {}
+		_pop_message("Mission déjà accomplie !", _object_rect(obj))
+		return
+	Sons.play("lancer_jeu")
 	GameManager.launch_mini_game(obj.scene, _cat.position, _cat.rotation)
+
+
+## Petit message qui monte au-dessus d'un objet puis disparaît.
+func _pop_message(text: String, rect: Rect2) -> void:
+	Sons.play("note_ratee")
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_override("font", FONT)
+	l.add_theme_font_size_override("font_size", 26)
+	l.add_theme_color_override("font_color", COL_CREAM)
+	l.add_theme_color_override("font_outline_color", COL_DARK)
+	l.add_theme_constant_override("outline_size", 8)
+	l.size = Vector2(420, 40)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.position = Vector2(clampf(rect.get_center().x - 210.0, 8.0, SCREEN.x - 428.0), maxf(rect.position.y - 46.0, HEADER_H + 4.0))
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ui_layer.add_child(l)
+	var tw := l.create_tween()
+	tw.tween_property(l, "position:y", l.position.y - 30.0, 0.9)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.9).set_delay(0.4)
+	tw.tween_callback(l.queue_free)
+
+
+## Texte d'un objet : sa mission, ou « Mission accomplie » si elle est faite.
+func _label_of(obj: Dictionary) -> String:
+	return "Mission accomplie !" if GameManager.is_mission_done(obj.id) else obj.label
+
+
+## Fin de la nuit : les 5 missions faites (victoire) ou le jour levé (défaite).
+func _check_night_end() -> void:
+	if _end_screen != null:
+		return
+	match GameManager.night_state:
+		GameManager.NightState.WON:
+			_end_screen = EcranFin.victoire()
+			Sons.play("victoire")
+		GameManager.NightState.LATE:
+			_end_screen = EcranFin.trop_tard()
+			Sons.play("defaite")
+		_:
+			return
+	_path.clear()
+	_pending = {}
+	_prompt.visible = false
+	_tooltip.visible = false
+	# Comme dans la maquette : plus de compteur sur les écrans de fin de nuit.
+	_missions_pill.visible = false
+	_missions_label.visible = false
+	add_child(_end_screen)
 
 
 # --- Boucle -------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	_check_night_end()
+	if _end_screen != null:
+		_cat.idle(delta)
+		return
 	if _jumping:
 		pass
 	elif _in_bed:
@@ -555,6 +659,7 @@ func _jump_in(aim: Vector2) -> void:
 ## Saut en arc (le chat grossit en l'air). En entrant, il se glisse sous la couette à
 ## l'atterrissage ; en sortant, il ressort de dessous avant de sauter.
 func _jump(to: Vector2, into_bed: bool, on_land := Callable()) -> void:
+	Sons.play("froissement")
 	_jumping = true
 	_in_bed = false
 	_push = 0.0
@@ -662,7 +767,10 @@ func _update_near() -> void:
 
 func _update_hover() -> void:
 	var mouse := get_viewport().get_mouse_position()
+	var was_hovered := _hovered
 	_hovered = _object_at(mouse)
+	if _hovered != was_hovered and not _hovered.is_empty():
+		Sons.play("survol")
 	_quit_hovered = QUIT_RECT.has_point(mouse)
 	_bed_hovered = not _in_bed and not _jumping and _hovered.is_empty() and DUVET_RECT.has_point(mouse)
 
@@ -673,9 +781,9 @@ func _update_hover() -> void:
 		elif _bed_hovered:
 			_tooltip_label.text = "Se glisser sous la couette  ·  %s" % ("clic" if _near_bed else "clic pour y aller")
 		elif _hovered == _near:
-			_tooltip_label.text = "%s  ·  clic" % _hovered.label
+			_tooltip_label.text = "%s  ·  clic" % _label_of(_hovered)
 		else:
-			_tooltip_label.text = "%s  ·  clic pour y aller" % _hovered.label
+			_tooltip_label.text = "%s  ·  clic pour y aller" % _label_of(_hovered)
 		_tooltip.reset_size()
 		var pos := mouse + Vector2(18, 18)
 		pos.x = minf(pos.x, SCREEN.x - _tooltip.size.x - 8)
@@ -689,7 +797,7 @@ func _update_hover() -> void:
 		text = "Sortir du lit"
 		rect = BED_RECT
 	elif not _near.is_empty() and _hovered != _near:
-		text = _near.label
+		text = _label_of(_near)
 		rect = _object_rect(_near)
 	elif _near_bed and not _bed_hovered:
 		text = "Se glisser sous la couette"

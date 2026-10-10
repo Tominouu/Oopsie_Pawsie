@@ -14,7 +14,6 @@ const MEOW := preload("res://assets/sounds/meow1.mp3")
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const FOND_TEX := preload("res://assets/sprites/aquarium/fond_bois.svg")
 const HEADER_TEX := preload("res://assets/sprites/aquarium/header.svg")
-const NUIT_TEX := preload("res://assets/sprites/aquarium/nuit.svg")
 const CHRONO_TEX := preload("res://assets/sprites/aquarium/chrono.svg")
 const REGLAGES_TEX := preload("res://assets/sprites/aquarium/reglages.svg")
 const FERMER_TEX := preload("res://assets/sprites/aquarium/fermer.svg")
@@ -153,6 +152,8 @@ func _ready() -> void:
 	_audio = AudioStreamPlayer.new()
 	_audio.stream = MEOW
 	add_child(_audio)
+	# Glouglou de l'aquarium en fond, discret.
+	add_child(Sons.make_loop("ambiance_bulles", -20.0))
 	_update_time_label()
 
 
@@ -222,7 +223,8 @@ func _build_paw() -> void:
 
 func _build_hud() -> void:
 	_add_texture(HEADER_TEX, Vector2.ZERO)
-	_add_texture(NUIT_TEX, Vector2(572.75, 24))
+	# Le dôme nuit → jour qui montre le temps qui reste (voir ciel.gd).
+	add_child(preload("res://scripts/ciel.gd").new())
 
 	add_child(_make_panel(Rect2(46, 22, 214.272, 69.12), COL_CREAM, 35))
 	_add_texture(CHRONO_TEX, Vector2(68.46, 32.37))
@@ -448,6 +450,7 @@ func _is_over_close(p: Vector2) -> bool:
 
 
 func _start_game() -> void:
+	Sons.play("popup_fermer")
 	_state = State.PLAYING
 	var tween := _popup.create_tween()
 	tween.tween_property(_popup, "modulate:a", 0.0, 0.2)
@@ -476,6 +479,8 @@ func _try_catch(p: Vector2) -> void:
 
 	# Plouf : gerbe d'eau, et tous les poissons du coin s'affolent.
 	_eau.splash(p, 1.0)
+	Sons.play("plouf")
+	Sons.play("bulles")
 	_shake = maxf(_shake, 0.35)
 	var local := p - _water.global_position
 	for f in _fishes:
@@ -486,6 +491,7 @@ func _try_catch(p: Vector2) -> void:
 		_wrong_fish += 1
 		_noise += noise_per_wrong_fish
 		_fling_fish(caught, p)
+		Sons.play("plouf", 3.0)
 		_shake = maxf(_shake, 0.7)
 		_flash_screen(0.25)
 		_hit_stop(0.06)
@@ -519,6 +525,7 @@ func _fling_fish(f: Fish, from: Vector2) -> void:
 	fly.tween_callback(func() -> void:
 		_eau.splash(land, 0.35)
 		_pop_text("FLOP !", land)
+		Sons.play("flop")
 		_flop(f))
 
 
@@ -541,6 +548,9 @@ func _catch_target(f: Fish, from: Vector2) -> void:
 	f.reparent(self)
 	move_child(f, get_child_count() - 1)
 	_eau.splash(from, 3.5)
+	Sons.play("grosse_gerbe")
+	Sons.play("plouf", 2.0)
+	Sons.play("bulles", 4.0)
 	Eau.screen_splats(_fx_layer, 7, SCREEN)
 	_shake = 1.5
 	_flash_screen(0.5)
@@ -658,16 +668,11 @@ func _finish(won: bool, reason: String) -> void:
 	_state = State.FINISHED
 	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
 	GameManager.record_result("aquarium", won)
+	Sons.play("victoire" if won else "defaite")
 	for f in _fishes:
 		f.set_process(false)
 	if not won:
 		# Montre où se cachait le poisson rose.
 		_target.reveal()
-
-	await get_tree().create_timer(result_delay).timeout
-	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
-	_title_label.add_theme_color_override("font_color", WIN_COLOR if won else LOSE_COLOR)
-	_sub_label.text = reason + "   ·   Clic pour rejouer   ·   Échap / B : maison"
-	_overlay.modulate.a = 0.0
-	_overlay.visible = true
-	create_tween().tween_property(_overlay, "modulate:a", 1.0, 0.4)
+	# Victoire : retour fluide à la maison. Défaite : écran « OOPSIE / TRY AGAIN ».
+	GameManager.end_mini_game(won)

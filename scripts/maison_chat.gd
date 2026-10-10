@@ -61,11 +61,14 @@ void fragment() {
 """
 const WAG_WALK := Vector2(14.0, 1.0)  # (vitesse, amplitude) en marchant
 const WAG_IDLE := Vector2(3.0, 0.35)  # (vitesse, amplitude) à l'arrêt
+## Temps entre deux bruits de pas.
+const STEP_TIME := 0.3
 
 ## Sous la couette, la bosse est un peu plus grosse que le chat.
 var bulk := 1.0
 
 var _walk_time := 0.0
+var _step_acc := 0.0
 var _body_mat := ShaderMaterial.new()
 var _tail: Sprite2D
 var _tail_mat := ShaderMaterial.new()
@@ -105,10 +108,21 @@ func walk(motion: Vector2, delta: float) -> void:
 	var sway := sin(_walk_time * 16.0)
 	scale = Vector2(1.0 + 0.04 * sway, 1.0 - 0.03 * sway) * TEXTURE_SCALE * bulk
 	_wag(WAG_WALK, delta)
+	# Bruits de pas (sur le sol) ou froissement (sous la couette).
+	_step_acc += delta
+	if _step_acc >= STEP_TIME:
+		_step_acc -= STEP_TIME
+		if bulk > 1.01:
+			Sons.play("froissement", -14.0)
+		else:
+			# Plus aigu : de petits coussinets plutôt que des chaussures.
+			Sons.play("pas", 0.0, 1.3)
 
 
 func idle(delta: float) -> void:
 	_walk_time = 0.0
+	# Le premier pas sonne vite quand le chat se remet à marcher.
+	_step_acc = STEP_TIME * 0.7
 	scale = scale.lerp(Vector2.ONE * TEXTURE_SCALE * bulk, minf(1.0, 10.0 * delta))
 	_wag(WAG_IDLE, delta)
 

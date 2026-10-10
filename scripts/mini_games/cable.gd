@@ -29,7 +29,6 @@ const PATH_POINTS := [
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const HEADER_TEX := preload("res://assets/sprites/cable/header.svg")
-const NUIT_TEX := preload("res://assets/sprites/cable/nuit.svg")
 const CHRONO_TEX := preload("res://assets/sprites/cable/chrono.svg")
 const GEAR_TEX := preload("res://assets/sprites/cable/parametres.svg")
 const BOLT_TEX := preload("res://assets/sprites/cable/boulon.svg")
@@ -154,7 +153,8 @@ func _reset() -> void:
 
 func _build_hud() -> void:
 	_add_texture(HEADER_TEX, Vector2.ZERO)
-	_add_texture(NUIT_TEX, Vector2(572.75, 24))
+	# Le dôme nuit → jour qui montre le temps qui reste (voir ciel.gd).
+	add_child(preload("res://scripts/ciel.gd").new())
 
 	add_child(_make_panel(Rect2(46, 22, 214.272, 69.12), COL_CREAM, 35))
 	_add_texture(CHRONO_TEX, Vector2(68.46, 32.37))
@@ -307,6 +307,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				if mb.button_index == MOUSE_BUTTON_LEFT and point.distance_to(_plug_pos) <= GRAB_RADIUS:
 					_state = State.DRAGGING
 					_play(_synth(500.0, 900.0, 0.07, false, 0.25))
+					Sons.play("prise")
 			State.LOST, State.WON:
 				if _overlay.visible:
 					get_tree().reload_current_scene()
@@ -319,6 +320,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _start_game() -> void:
+	Sons.play("popup_fermer")
 	_state = State.IDLE
 	var tween := _popup.create_tween()
 	tween.tween_property(_popup, "modulate:a", 0.0, 0.2)
@@ -397,6 +399,8 @@ func _lose(reason: String) -> void:
 	_flash = 1.0
 	_spawn_sparks(_plug_pos, COL_WALL_HIT, 24)
 	_play(_synth(115.0, 95.0, 0.5, true, 0.18))
+	Sons.play("tele_zap", 10.0)
+	Sons.play("bzzt_metal")
 	_finish(false, reason)
 
 
@@ -411,6 +415,7 @@ func _win() -> void:
 	for f in [523.0, 659.0, 784.0, 1047.0]:
 		jingle.append_array(_synth(f, f, 0.11, false, 0.25))
 	_play(jingle)
+	Sons.play("debranche")
 	_finish(true, "Câble débranché en %.2f s" % _elapsed)
 
 
@@ -419,14 +424,9 @@ func _win() -> void:
 func _finish(won: bool, message: String) -> void:
 	# La maison garde les traces du mini-jeu (voir maison_traces.gd).
 	GameManager.record_result("cable", won)
-	_title_label.text = "PAWSOME !" if won else "OOPSIE !"
-	_title_label.add_theme_color_override("font_color", COL_GOAL if won else COL_WALL_HIT)
-	var hint := "Clic pour rejouer" if won else "Clic pour réessayer"
-	_sub_label.text = "%s   ·   %s   ·   Échap / B : maison" % [message, hint]
-	await get_tree().create_timer(result_delay).timeout
-	_overlay.modulate.a = 0.0
-	_overlay.visible = true
-	create_tween().tween_property(_overlay, "modulate:a", 1.0, 0.4)
+	Sons.play("victoire" if won else "defaite")
+	# Victoire : retour fluide à la maison. Défaite : écran « OOPSIE / TRY AGAIN ».
+	GameManager.end_mini_game(won)
 
 
 # --- Boucle ------------------------------------------------------------------

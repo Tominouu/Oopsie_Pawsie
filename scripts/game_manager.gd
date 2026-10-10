@@ -11,6 +11,24 @@ extends Node
 const HOUSE_SCENE := "res://scenes/maison.tscn"
 const TITLE_SCENE := "res://scenes/menu.tscn"
 
+const EcranFin := preload("res://scripts/ecran_fin.gd")
+const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
+## Fin d'un mini-jeu : temps laissé pour profiter des effets avant la transition / l'écran de défaite.
+const WIN_DELAY := 1.6
+const LOSE_DELAY := 0.9
+## Transition de victoire : disque transparent qui se referme (rayon en fraction de la hauteur d'écran).
+const IRIS_OPEN := 1.3
+const IRIS_SHADER := """
+shader_type canvas_item;
+uniform float radius = 1.3;
+uniform vec4 fill : source_color = vec4(0.169, 0.09, 0.063, 1.0);
+void fragment() {
+	vec2 p = (UV - vec2(0.5)) * vec2(1280.0 / 720.0, 1.0);
+	float edge = smoothstep(radius - 0.006, radius + 0.006, length(p));
+	COLOR = vec4(fill.rgb, fill.a * edge);
+}
+"""
+
 const CURSOR_SPEED := 950.0
 ## Le stick droit déplace le curseur moins vite, pour viser finement.
 const RIGHT_STICK_FACTOR := 0.35
@@ -24,6 +42,14 @@ const MOUSE_RESYNC := 3.0
 ## Position / orientation du chat dans la maison ; INF = pas encore placé (position de la maquette).
 var cat_position := Vector2.INF
 var cat_rotation := 0.0
+## La nuit : il faut réussir les 5 missions (mini-jeux) avant que le jour se lève.
+enum NightState { RUNNING, WON, LATE }
+const MISSIONS_TOTAL := 5
+## Durée de la nuit, en secondes de jeu (maison + mini-jeux).
+const NIGHT_DURATION := 300.0
+var night_time := 0.0
+var night_state := NightState.RUNNING
+
 ## Résultats des mini-jeux de la partie en cours, pour que la maison en garde les traces :
 ## { "souris": {"won": déjà gagné au moins une fois, "last": dernier résultat}, ... }
 var results := {}
@@ -40,6 +66,7 @@ var _precision := 1.0
 var _assist_targets: Array[Vector3] = []   # (x, y, rayon)
 var _pull := Vector2.INF
 var _pull_strength := 0.0
+var _transitioning := false
 
 
 func _ready() -> void:
@@ -58,11 +85,23 @@ func back_to_house() -> void:
 
 
 func back_to_title() -> void:
-	# Une nouvelle partie repart de la position de la maquette, dans une maison propre.
+	_reset_night()
+	get_tree().change_scene_to_file(TITLE_SCENE)
+
+
+## Recommence une nuit complète (bouton RETRY / TRY AGAIN des écrans de fin de nuit).
+func restart_night() -> void:
+	_reset_night()
+	back_to_house()
+
+
+## Une nouvelle nuit repart de la position de la maquette, dans une maison propre.
+func _reset_night() -> void:
 	cat_position = Vector2.INF
 	cat_rotation = 0.0
 	results.clear()
-	get_tree().change_scene_to_file(TITLE_SCENE)
+	night_time = 0.0
+	night_state = NightState.RUNNING
 
 
 ## Appelé par chaque mini-jeu à sa fin. Une victoire laisse ses traces pour de bon.
@@ -71,6 +110,109 @@ func record_result(game: String, won: bool) -> void:
 	r.won = r.won or won
 	r.last = won
 	results[game] = r
+	# Toutes les missions faites avant le jour : le temps s'arrête, la maison affichera la victoire.
+	if night_state == NightState.RUNNING and missions_done() >= MISSIONS_TOTAL:
+		night_state = NightState.WON
+
+
+# --- La nuit -------------------------------------------------------------------------
+
+## Nombre de mini-jeux différents déjà gagnés cette nuit.
+func missions_done() -> int:
+	var n := 0
+	for game in results:
+		if results[game].won:
+			n += 1
+	return n
+
+
+func is_mission_done(game: String) -> bool:
+	return results.has(game) and results[game].won
+
+
+## 0 = début de la nuit, 1 = le jour est levé.
+func night_progress() -> float:
+	return clampf(night_time / NIGHT_DURATION, 0.0, 1.0)
+
+
+## La nuit avance dans la maison comme dans les mini-jeux (pas au menu titre).
+func _tick_night(delta: float) -> void:
+	if night_state != NightState.RUNNING:
+		return
+	var scene := get_tree().current_scene
+	if scene == null or not (scene.scene_file_path == HOUSE_SCENE or _in_mini_game()):
+		return
+	night_time += delta
+	if night_time >= NIGHT_DURATION:
+		night_state = NightState.LATE
+		# Trop tard : si on est dans un mini-jeu, retour à la maison où s'affiche « YOU LOSE ».
+		if _in_mini_game():
+			transition_to_house("LE JOUR SE LÈVE…")
+
+
+# --- Fin d'un mini-jeu ------------------------------------------------------------------
+
+## Fin commune à tous les mini-jeux, après un court délai pour profiter des effets :
+## victoire = transition fluide vers la maison (prochaine mission), défaite = écran « OOPSIE / TRY AGAIN ».
+func end_mini_game(won: bool) -> void:
+	var scene := get_tree().current_scene
+	# Temps réel : les arrêts sur image des jeux ne doivent pas rallonger l'attente.
+	await get_tree().create_timer(WIN_DELAY if won else LOSE_DELAY, true, false, true).timeout
+	if get_tree().current_scene != scene:
+		return  # le joueur est déjà parti (Échap / B)
+	if won:
+		transition_to_house()
+	else:
+		scene.add_child(EcranFin.defaite())
+
+
+## Iris qui se ferme sur le mini-jeu, un message (« MISSION RÉUSSIE ! »), puis se rouvre sur la maison.
+func transition_to_house(message := "MISSION RÉUSSIE !") -> void:
+	if _transitioning:
+		return
+	_transitioning = true
+	var layer := CanvasLayer.new()
+	layer.layer = 100
+	add_child(layer)
+	var iris := ColorRect.new()
+	iris.size = Vector2(1280, 720)
+	iris.mouse_filter = Control.MOUSE_FILTER_STOP  # pas de clic parasite pendant la transition
+	var shader := Shader.new()
+	shader.code = IRIS_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	mat.set_shader_parameter("radius", IRIS_OPEN)
+	iris.material = mat
+	layer.add_child(iris)
+	var label := Label.new()
+	label.text = message
+	label.add_theme_font_override("font", FONT)
+	label.add_theme_font_size_override("font_size", 64)
+	label.add_theme_color_override("font_color", Color("fff2e4"))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.size = Vector2(1280, 720)
+	label.pivot_offset = label.size * 0.5
+	label.scale = Vector2.ZERO
+	layer.add_child(label)
+
+	var close := create_tween()
+	close.tween_method(func(r: float) -> void: mat.set_shader_parameter("radius", r), IRIS_OPEN, 0.0, 0.55) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	close.tween_property(label, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	close.tween_interval(0.45)
+	await close.finished
+	back_to_house()
+	# Laisse la maison se construire avant de rouvrir.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var open := create_tween()
+	open.tween_property(label, "modulate:a", 0.0, 0.2)
+	open.tween_method(func(r: float) -> void: mat.set_shader_parameter("radius", r), 0.0, IRIS_OPEN, 0.6) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	await open.finished
+	layer.queue_free()
+	_transitioning = false
 
 
 # --- Aides à la manette, appelées par les mini-jeux à chaque image ------------------
@@ -120,6 +262,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	_tick_night(delta)
 	var precision := _precision
 	var targets := _assist_targets.duplicate()
 	var pull := _pull
