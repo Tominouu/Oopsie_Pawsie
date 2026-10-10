@@ -419,7 +419,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Le viseur suit exactement la position de l'événement (pas de décalage d'une frame).
 		_viseur.position = (event as InputEventMouse).position
 	# Manette : A ou Start ferme la pop-up sans avoir à viser la croix.
-	if _state == State.INTRO and event is InputEventJoypadButton and event.pressed \
+	if _state == State.INTRO and GameManager.pad_enabled and event is InputEventJoypadButton and event.pressed \
 			and (event as InputEventJoypadButton).button_index in [JOY_BUTTON_A, JOY_BUTTON_START]:
 		# Le clic que GameManager simule pour ce même A arrive juste après : on l'ignore.
 		_skip_next_click = (event as InputEventJoypadButton).button_index == JOY_BUTTON_A

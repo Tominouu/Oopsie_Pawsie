@@ -14,6 +14,7 @@ const Pipi := preload("res://scripts/maison_pipi.gd")
 const MEOW := preload("res://assets/sounds/meow1.mp3")
 const Noir := preload("res://scripts/maison_noir.gd")
 const Torche := preload("res://scripts/maison_torche.gd")
+const Parametres := preload("res://scripts/parametres.gd")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const DIR := "res://assets/sprites/maison/"
@@ -98,6 +99,8 @@ const CELL := 10
 const PAD_DEADZONE := 0.25
 
 const QUIT_RECT := Rect2(10, 655, 62, 60)
+## Roue dentée du bandeau : ouvre la page SETTINGS.
+const GEAR_RECT := Rect2(1172, 22, 68.144, 69.144)
 const NIGHT_TINT := Color(0, 29.0 / 255.0, 56.0 / 255.0, 0.17)
 const COL_FLOOR := Color("b19e8a")
 const COL_CREAM := Color("fff2e4")
@@ -123,6 +126,7 @@ var _pending: Dictionary = {}
 var _near: Dictionary = {}
 var _hovered: Dictionary = {}
 var _quit_hovered := false
+var _gear_hovered := false
 ## Vrai quand la dernière entrée vient de la manette (la bulle affiche alors « A : … »).
 var _using_pad := false
 var _highlight_mat := ShaderMaterial.new()
@@ -443,7 +447,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Pendant le pipi, on ne bouge pas (on finit ce qu'on a commencé).
 	if _pipi.is_peeing():
 		return
-	# Manette (Xbox) : A = interagir, X = pipi (dans le lit), Start = retour au menu.
+	# Manette (Xbox) : A = interagir, X = pipi (dans le lit), Start = retour au menu, View = réglages.
+	# View ouvre les réglages même en mode clavier + souris (pour pouvoir y réactiver la manette).
+	if event is InputEventJoypadButton and event.pressed and (event as InputEventJoypadButton).button_index == JOY_BUTTON_BACK:
+		_open_settings()
+		return
+	# Mode clavier + souris (réglages) : la manette est ignorée.
+	if (event is InputEventJoypadButton or event is InputEventJoypadMotion) and not GameManager.pad_enabled:
+		return
 	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
 		_using_pad = true
 	if event is InputEventJoypadButton and event.pressed:
@@ -465,6 +476,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_interact()
 			KEY_P:
 				_try_pee()
+			KEY_TAB:
+				_open_settings()
 		return
 	if not (event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT):
@@ -473,6 +486,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	var p: Vector2 = make_input_local(event).position
 	if QUIT_RECT.has_point(p):
 		GameManager.back_to_title()
+		return
+	if GEAR_RECT.has_point(p):
+		_open_settings()
 		return
 	if _jumping:
 		return
@@ -581,6 +597,18 @@ func _launch(obj: Dictionary) -> void:
 		return
 	Sons.play("lancer_jeu")
 	GameManager.launch_mini_game(obj.scene, _cat.position, _cat.rotation)
+
+
+## Page SETTINGS par-dessus la maison (le jeu est en pause pendant ce temps).
+func _open_settings() -> void:
+	if _end_screen != null:
+		return
+	_path.clear()
+	_pending = {}
+	_tooltip.visible = false
+	_prompt.visible = false
+	Sons.play("lancer_jeu")
+	Parametres.open(self)
 
 
 ## Le chat avale la lampe torche : un faisceau sort de sa tête pour le reste de la nuit.
@@ -835,7 +863,7 @@ func _keyboard_direction() -> Vector2:
 
 ## Stick gauche (analogique : le chat va plus ou moins vite) ou croix directionnelle, sur toutes les manettes.
 func _pad_direction() -> Vector2:
-	for pad in Input.get_connected_joypads():
+	for pad in GameManager.pads():
 		var stick := Vector2(Input.get_joy_axis(pad, JOY_AXIS_LEFT_X), Input.get_joy_axis(pad, JOY_AXIS_LEFT_Y))
 		if stick.length() > PAD_DEADZONE:
 			# Remet l'échelle à 0 au bord de la zone morte pour un démarrage en douceur.
@@ -901,11 +929,14 @@ func _update_hover() -> void:
 	if _hovered != was_hovered and not _hovered.is_empty():
 		Sons.play("survol")
 	_quit_hovered = QUIT_RECT.has_point(mouse)
+	_gear_hovered = GEAR_RECT.has_point(mouse)
 	_bed_hovered = not _in_bed and not _jumping and _hovered.is_empty() and DUVET_RECT.has_point(mouse)
 
-	_tooltip.visible = not _hovered.is_empty() or _quit_hovered or _bed_hovered
+	_tooltip.visible = not _hovered.is_empty() or _quit_hovered or _gear_hovered or _bed_hovered
 	if _tooltip.visible:
-		if _quit_hovered:
+		if _gear_hovered:
+			_tooltip_label.text = "Settings"
+		elif _quit_hovered:
 			_tooltip_label.text = "Back to menu"
 		elif _bed_hovered:
 			_tooltip_label.text = "Slip under the duvet  ·  %s" % ("click" if _near_bed else "click to go there")

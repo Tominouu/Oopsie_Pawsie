@@ -190,7 +190,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var confirm := false
 	if event is InputEventKey and event.pressed and not event.echo:
 		confirm = (event as InputEventKey).keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]
-	elif event is InputEventJoypadButton and event.pressed:
+	elif event is InputEventJoypadButton and event.pressed and GameManager.pad_enabled:
 		confirm = (event as InputEventJoypadButton).button_index in [JOY_BUTTON_A, JOY_BUTTON_START]
 	if confirm:
 		get_viewport().set_input_as_handled()

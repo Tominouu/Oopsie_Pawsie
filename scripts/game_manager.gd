@@ -72,9 +72,53 @@ var _pull := Vector2.INF
 var _pull_strength := 0.0
 var _transitioning := false
 
+## Réglages (page SETTINGS), gardés dans user://settings.cfg.
+const SETTINGS_PATH := "user://settings.cfg"
+## false = mode « clavier + souris » : la manette est ignorée partout (sauf dans la page des réglages).
+var pad_enabled := true
+var sound_off := false
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_load_settings()
+
+
+# --- Réglages ------------------------------------------------------------------------
+
+func set_pad_enabled(on: bool) -> void:
+	pad_enabled = on
+	_save_settings()
+
+
+func set_sound_off(off: bool) -> void:
+	sound_off = off
+	_apply_settings()
+	_save_settings()
+
+
+## Manettes à écouter (aucune en mode clavier + souris).
+func pads() -> Array[int]:
+	return Input.get_connected_joypads() if pad_enabled else [] as Array[int]
+
+
+func _load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		pad_enabled = cfg.get_value("controls", "pad_enabled", true)
+		sound_off = cfg.get_value("audio", "sound_off", false)
+	_apply_settings()
+
+
+func _save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("controls", "pad_enabled", pad_enabled)
+	cfg.set_value("audio", "sound_off", sound_off)
+	cfg.save(SETTINGS_PATH)
+
+
+func _apply_settings() -> void:
+	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), sound_off)
 
 
 func launch_mini_game(scene_path: String, from_position: Vector2, from_rotation: float) -> void:
@@ -143,7 +187,7 @@ func night_progress() -> float:
 
 ## La nuit avance dans la maison comme dans les mini-jeux (pas au menu titre).
 func _tick_night(delta: float) -> void:
-	if night_state != NightState.RUNNING:
+	if night_state != NightState.RUNNING or get_tree().paused:
 		return
 	var scene := get_tree().current_scene
 	if scene == null or not (scene.scene_file_path == HOUSE_SCENE or _in_mini_game()):
@@ -249,7 +293,7 @@ func _in_mini_game() -> bool:
 
 
 func _input(event: InputEvent) -> void:
-	if not (event is InputEventJoypadButton) or not _in_mini_game():
+	if not (event is InputEventJoypadButton) or not _in_mini_game() or not pad_enabled:
 		return
 	var jb := event as InputEventJoypadButton
 	match jb.button_index:
@@ -285,7 +329,7 @@ func _process(delta: float) -> void:
 	var stick := Vector2.ZERO
 	var trigger_left := 0.0
 	var trigger_right := 0.0
-	for pad in Input.get_connected_joypads():
+	for pad in pads():
 		stick += _stick(pad, JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y)
 		stick += _stick(pad, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y) * RIGHT_STICK_FACTOR
 		trigger_left = maxf(trigger_left, Input.get_joy_axis(pad, JOY_AXIS_TRIGGER_LEFT))
