@@ -53,6 +53,8 @@ var night_state := NightState.RUNNING
 ## Résultats des mini-jeux de la partie en cours, pour que la maison en garde les traces :
 ## { "souris": {"won": déjà gagné au moins une fois, "last": dernier résultat}, ... }
 var results := {}
+## Taches de pipi dans le lit du maître cette nuit : { "pos", "r", "seed" } (voir maison_pipi.gd).
+var pee_stains: Array = []
 
 var _button_click := false
 var _trigger_click := false
@@ -100,6 +102,7 @@ func _reset_night() -> void:
 	cat_position = Vector2.INF
 	cat_rotation = 0.0
 	results.clear()
+	pee_stains.clear()
 	night_time = 0.0
 	night_state = NightState.RUNNING
 

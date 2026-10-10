@@ -10,6 +10,8 @@ const Chat := preload("res://scripts/maison_chat.gd")
 const Traces := preload("res://scripts/maison_traces.gd")
 const Ciel := preload("res://scripts/ciel.gd")
 const EcranFin := preload("res://scripts/ecran_fin.gd")
+const Pipi := preload("res://scripts/maison_pipi.gd")
+const MEOW := preload("res://assets/sounds/meow1.mp3")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const DIR := "res://assets/sprites/maison/"
@@ -52,6 +54,10 @@ const JUMP_TIME := 0.4
 const JUMP_LIFT := 0.35
 ## Le chat ne saute hors du lit que vers un endroit libre assez proche, dans le sens poussé.
 const JUMP_OUT_MAX := 170.0
+## Pipi au lit : temps pour que la vessie se remplisse avant le suivant.
+const PEE_REFILL := 6.0
+## Distance torse ↔ arrière-train (là où la tache apparaît).
+const PEE_BACK := 20.0
 
 ## Zones où le chat ne peut pas marcher (meubles), relevées sur la maquette.
 const OBSTACLES := [
@@ -125,6 +131,11 @@ var _bed_hovered := false
 var _bed_target := Vector2.INF
 ## Point de la couette cliqué depuis le sol : le chat y saute en arrivant au lit.
 var _bed_pending := Vector2.INF
+## Taches de pipi dans le lit (enfant du masque de la couette, sous le chat).
+var _pipi: Pipi
+var _pee_cooldown := 0.0
+var _pee_rot := 0.0
+var _was_peeing := false
 
 var _prompt: PanelContainer
 var _prompt_label: Label
@@ -243,6 +254,8 @@ func _build_cat() -> void:
 	_duvet_clip.polygon = PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
 	_duvet_clip.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
 	add_child(_duvet_clip)
+	_pipi = Pipi.new()
+	_duvet_clip.add_child(_pipi)
 
 	_cat = Chat.new()
 	var saved: Vector2 = GameManager.cat_position
@@ -394,13 +407,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
 			GameManager.back_to_title()
 		return
-	# Manette (Xbox) : A = interagir, Start = retour au menu.
+	# Pendant le pipi, on ne bouge pas (on finit ce qu'on a commencé).
+	if _pipi.is_peeing():
+		return
+	# Manette (Xbox) : A = interagir, X = pipi (dans le lit), Start = retour au menu.
 	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
 		_using_pad = true
 	if event is InputEventJoypadButton and event.pressed:
 		match (event as InputEventJoypadButton).button_index:
 			JOY_BUTTON_A:
 				_interact()
+			JOY_BUTTON_X:
+				_try_pee()
 			JOY_BUTTON_START:
 				GameManager.back_to_title()
 		return
@@ -412,6 +430,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				GameManager.back_to_title()
 			KEY_E, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER:
 				_interact()
+			KEY_P:
+				_try_pee()
 		return
 	if not (event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT):
@@ -473,6 +493,36 @@ func _interact() -> void:
 		_jump_in(_cat.position)
 
 
+## Sous la couette : le chat se soulage dans le lit du maître (une tache qui reste toute la nuit).
+func _try_pee() -> void:
+	if not _in_bed or _jumping or _pipi.is_peeing():
+		return
+	if _pee_cooldown > 0.0:
+		_pop_message("Vessie vide… reviens dans %d s" % ceili(_pee_cooldown), BED_RECT)
+		return
+	_bed_target = Vector2.INF
+	_push = 0.0
+	_pee_rot = _cat.rotation
+	var rear := _cat.position - Vector2.UP.rotated(_cat.rotation) * PEE_BACK
+	_pipi.pee(rear.clamp(DUVET_RECT.position, DUVET_RECT.end))
+	_was_peeing = true
+
+
+## Fin du pipi : soupir de soulagement.
+func _pee_done() -> void:
+	_was_peeing = false
+	_pee_cooldown = PEE_REFILL
+	_cat.rotation = _pee_rot
+	_pop_message("Ahhh… soulagé !", BED_RECT, false)
+	var meow := AudioStreamPlayer.new()
+	meow.stream = MEOW
+	meow.pitch_scale = 1.25
+	meow.volume_db = -4.0
+	meow.finished.connect(meow.queue_free)
+	add_child(meow)
+	meow.play()
+
+
 func _walk_to_cell(target: Vector2i, obj: Dictionary) -> void:
 	_bed_pending = Vector2.INF
 	if target.x < 0:
@@ -496,8 +546,9 @@ func _launch(obj: Dictionary) -> void:
 
 
 ## Petit message qui monte au-dessus d'un objet puis disparaît.
-func _pop_message(text: String, rect: Rect2) -> void:
-	Sons.play("note_ratee")
+func _pop_message(text: String, rect: Rect2, refused := true) -> void:
+	if refused:
+		Sons.play("note_ratee")
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_override("font", FONT)
@@ -551,7 +602,14 @@ func _process(delta: float) -> void:
 	if _end_screen != null:
 		_cat.idle(delta)
 		return
-	if _jumping:
+	_pee_cooldown = maxf(_pee_cooldown - delta, 0.0)
+	if _pipi.is_peeing():
+		# Le chat frissonne sur place pendant que ça coule.
+		_cat.idle(delta)
+		_cat.rotation = _pee_rot + sin(Time.get_ticks_msec() * 0.045) * 0.06
+	elif _was_peeing:
+		_pee_done()
+	elif _jumping:
 		pass
 	elif _in_bed:
 		_process_bed(delta)
@@ -802,9 +860,11 @@ func _update_hover() -> void:
 	elif _near_bed and not _bed_hovered:
 		text = "Se glisser sous la couette"
 		rect = BED_RECT
-	_prompt.visible = text != "" and not _jumping
+	_prompt.visible = text != "" and not _jumping and not _pipi.is_peeing()
 	if _prompt.visible:
 		_prompt_label.text = "%s : %s" % ["A" if _using_pad else "E", text]
+		if _in_bed:
+			_prompt_label.text += "   ·   %s : Faire pipi" % ("X" if _using_pad else "P")
 		_prompt.reset_size()
 		var pos := Vector2(rect.get_center().x - _prompt.size.x * 0.5, rect.position.y - _prompt.size.y - 8)
 		if pos.y < HEADER_H + 4:

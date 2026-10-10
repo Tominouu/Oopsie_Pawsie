@@ -10,7 +10,7 @@ Kenney (www.kenney.nl) — CC0
   - Music Jingles   : victoire_* (pizzicato 02, 04, 10), defaite_* (pizzicato 01, 05, 14), combo (hit 11)
 
 rubberduck — « 40 CC0 water / splash / slime SFX » (opengameart.org) — CC0
-  - plouf_*, grosse_gerbe_*, bulles_*, ambiance_bulles
+  - plouf_*, grosse_gerbe_*, bulles_*, ambiance_bulles, pipi (loop_water_01)
 
 EZduzziteh — « Squish Sounds Effects » (opengameart.org) — CC0
   - gicle_* (squish_01 à 06), ecrasement (squishsplat_impact), eclatement (squishpop)
