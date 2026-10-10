@@ -12,6 +12,8 @@ const Ciel := preload("res://scripts/ciel.gd")
 const EcranFin := preload("res://scripts/ecran_fin.gd")
 const Pipi := preload("res://scripts/maison_pipi.gd")
 const MEOW := preload("res://assets/sounds/meow1.mp3")
+const Noir := preload("res://scripts/maison_noir.gd")
+const Torche := preload("res://scripts/maison_torche.gd")
 
 const FONT := preload("res://assets/fonts/FredokaOne-Regular.ttf")
 const DIR := "res://assets/sprites/maison/"
@@ -58,6 +60,11 @@ const JUMP_OUT_MAX := 170.0
 const PEE_REFILL := 6.0
 ## Distance torse ↔ arrière-train (là où la tache apparaît).
 const PEE_BACK := 20.0
+## Lampe torche posée sur le canapé (à avaler pour y voir clair).
+const TORCH_POS := Vector2(812, 398)
+const TORCH_ROT := -0.35
+## Temps d'allumage du faisceau une fois la torche avalée.
+const TORCH_ON_TIME := 0.8
 
 ## Zones où le chat ne peut pas marcher (meubles), relevées sur la maquette.
 const OBSTACLES := [
@@ -137,6 +144,12 @@ var _pee_cooldown := 0.0
 var _pee_rot := 0.0
 var _was_peeing := false
 
+## Obscurité de la nuit, et la torche (null une fois avalée). _torch_power : 0 → 1, le faisceau.
+var _dark: Noir
+var _torch: Torche
+var _torch_power := 0.0
+var _traces_glow: Node
+
 var _prompt: PanelContainer
 var _prompt_label: Label
 var _tooltip: PanelContainer
@@ -186,6 +199,15 @@ func _build_map() -> void:
 		add_child(t)
 		_layers[entry[0]] = t
 
+	# La lampe torche sur le canapé, tant que le chat ne l'a pas avalée.
+	if GameManager.has_torch:
+		_torch_power = 1.0
+	else:
+		_torch = Torche.new()
+		_torch.position = TORCH_POS
+		_torch.rotation = TORCH_ROT
+		add_child(_torch)
+
 	# Traces laissées par les mini-jeux déjà joués (sang, croquettes, télé qui grésille…).
 	var traces := Traces.new()
 	add_child(traces)
@@ -197,8 +219,9 @@ func _build_map() -> void:
 	night.size = SCREEN
 	night.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(night)
-	# Ce qui brille (étincelles de la télé) passe au-dessus du voile de nuit.
-	add_child(traces.glow)
+	# Ce qui brille (étincelles de la télé) passe au-dessus du voile de nuit… et de l'obscurité (voir _build_cat).
+	_traces_glow = traces.glow
+	add_child(_traces_glow)
 
 	_add_texture(load(DIR + "header.svg"), Vector2.ZERO)
 	# Le dôme nuit → jour qui montre le temps qui reste (voir ciel.gd).
@@ -265,6 +288,16 @@ func _build_cat() -> void:
 	else:
 		_cat.position = CAT_START
 	add_child(_cat)
+
+	# Le noir de la nuit recouvre la maison et le chat (pas le bandeau du haut).
+	_dark = Noir.new(Rect2(0, HEADER_H, SCREEN.x, SCREEN.y - HEADER_H))
+	add_child(_dark)
+	# Restent visibles dans le noir : les étincelles de la télé et le bouton quitter.
+	move_child(_traces_glow, -1)
+	move_child(_layers["bouton_quitter"], -1)
+	_refresh_dark(0.0)
+	if not GameManager.has_torch:
+		_hint_torch.call_deferred()
 
 
 func _build_ui() -> void:
@@ -536,6 +569,11 @@ func _walk_to_cell(target: Vector2i, obj: Dictionary) -> void:
 
 
 func _launch(obj: Dictionary) -> void:
+	# Sur le canapé, il y a d'abord la lampe torche à avaler.
+	if obj.id == "canape" and _torch != null:
+		_pending = {}
+		_eat_torch()
+		return
 	# Une mission réussie ne se refait pas : la nuit est comptée.
 	if GameManager.is_mission_done(obj.id):
 		_pending = {}
@@ -545,8 +583,36 @@ func _launch(obj: Dictionary) -> void:
 	GameManager.launch_mini_game(obj.scene, _cat.position, _cat.rotation)
 
 
+## Le chat avale la lampe torche : un faisceau sort de sa tête pour le reste de la nuit.
+func _eat_torch() -> void:
+	if _torch == null or not _torch.is_processing():
+		return
+	GameManager.has_torch = true
+	var mouth := _cat.position + Vector2.UP.rotated(_cat.rotation) * HEAD_OFFSET
+	_torch.swallow(mouth, func() -> void:
+		Sons.play("conserve", 2.0, 0.8)
+		Sons.play("chips")
+		_torch = null
+		_pop_message("GULP! Now I can see!", Rect2(_cat.position - Vector2(0, 40), Vector2.ZERO), false, 1.6)
+		# Le faisceau s'allume en clignotant, comme une vraie lampe.
+		var tw := create_tween()
+		for v in [0.6, 0.0, 0.8, 0.2]:
+			tw.tween_property(self, "_torch_power", v, TORCH_ON_TIME / 8.0)
+		tw.tween_property(self, "_torch_power", 1.0, TORCH_ON_TIME / 2.0))
+
+
+## Premier passage dans le noir : on explique quoi faire.
+func _hint_torch() -> void:
+	_pop_message("It's pitch dark… the TV is on, check the sofa!", Rect2(_cat.position - Vector2(0, 40), Vector2.ZERO), false, 3.5)
+
+
+func _refresh_dark(delta: float) -> void:
+	var item := Vector2.INF if _torch == null else _torch.global_position
+	_dark.refresh(delta, _cat.position, Vector2.UP.rotated(_cat.rotation), _torch_power, item)
+
+
 ## Petit message qui monte au-dessus d'un objet puis disparaît.
-func _pop_message(text: String, rect: Rect2, refused := true) -> void:
+func _pop_message(text: String, rect: Rect2, refused := true, duration := 0.9) -> void:
 	if refused:
 		Sons.play("note_ratee")
 	var l := Label.new()
@@ -556,19 +622,21 @@ func _pop_message(text: String, rect: Rect2, refused := true) -> void:
 	l.add_theme_color_override("font_color", COL_CREAM)
 	l.add_theme_color_override("font_outline_color", COL_DARK)
 	l.add_theme_constant_override("outline_size", 8)
-	l.size = Vector2(420, 40)
+	l.size = Vector2(700, 40)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.position = Vector2(clampf(rect.get_center().x - 210.0, 8.0, SCREEN.x - 428.0), maxf(rect.position.y - 46.0, HEADER_H + 4.0))
+	l.position = Vector2(clampf(rect.get_center().x - 350.0, 8.0, SCREEN.x - 708.0), maxf(rect.position.y - 46.0, HEADER_H + 4.0))
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ui_layer.add_child(l)
 	var tw := l.create_tween()
-	tw.tween_property(l, "position:y", l.position.y - 30.0, 0.9)
-	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.9).set_delay(0.4)
+	tw.tween_property(l, "position:y", l.position.y - 30.0, duration)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, minf(0.5, duration)).set_delay(duration - minf(0.5, duration))
 	tw.tween_callback(l.queue_free)
 
 
 ## Texte d'un objet : sa mission, ou « Mission accomplie » si elle est faite.
 func _label_of(obj: Dictionary) -> String:
+	if obj.id == "canape" and _torch != null:
+		return "Eat the flashlight"
 	return "Mission complete!" if GameManager.is_mission_done(obj.id) else obj.label
 
 
@@ -598,6 +666,7 @@ func _check_night_end() -> void:
 # --- Boucle -------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	_refresh_dark(delta)
 	_check_night_end()
 	if _end_screen != null:
 		_cat.idle(delta)

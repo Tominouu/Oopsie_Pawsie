@@ -55,6 +55,8 @@ var night_state := NightState.RUNNING
 var results := {}
 ## Taches de pipi dans le lit du maître cette nuit : { "pos", "r", "seed" } (voir maison_pipi.gd).
 var pee_stains: Array = []
+## Le chat a avalé la lampe torche du canapé : il éclaire devant lui pour le reste de la nuit.
+var has_torch := false
 
 var _button_click := false
 var _trigger_click := false
@@ -103,6 +105,7 @@ func _reset_night() -> void:
 	cat_rotation = 0.0
 	results.clear()
 	pee_stains.clear()
+	has_torch = false
 	night_time = 0.0
 	night_state = NightState.RUNNING
 
