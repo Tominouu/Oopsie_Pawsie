@@ -150,7 +150,7 @@ func _tick_night(delta: float) -> void:
 		night_state = NightState.LATE
 		# Trop tard : si on est dans un mini-jeu, retour à la maison où s'affiche « YOU LOSE ».
 		if _in_mini_game():
-			transition_to_house("LE JOUR SE LÈVE…")
+			transition_to_house("THE SUN IS RISING…")
 
 
 # --- Fin d'un mini-jeu ------------------------------------------------------------------
@@ -170,7 +170,7 @@ func end_mini_game(won: bool) -> void:
 
 
 ## Iris qui se ferme sur le mini-jeu, un message (« MISSION RÉUSSIE ! »), puis se rouvre sur la maison.
-func transition_to_house(message := "MISSION RÉUSSIE !") -> void:
+func transition_to_house(message := "MISSION COMPLETE!") -> void:
 	if _transitioning:
 		return
 	_transitioning = true

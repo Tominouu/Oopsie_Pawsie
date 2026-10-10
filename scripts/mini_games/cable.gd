@@ -205,7 +205,7 @@ func _build_popup() -> void:
 	_popup.add_child(box)
 
 	var title := _make_label(42, COL_DARK)
-	title.text = "MISSION : DOCTEUR MABOULE"
+	title.text = "MISSION: OPERATION UNPLUG"
 	title.position = Vector2(215, 328)
 	title.size = Vector2(860, 45)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -215,8 +215,8 @@ func _build_popup() -> void:
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.custom_minimum_size = Vector2(782, 0)
-	body.text = "Maintiens CLIC GAUCHE sur la patte et guide la prise dans le couloir " \
-		+ "sans toucher les bords, jusqu'au point vert, avant la fin du chrono."
+	body.text = "Hold LEFT CLICK on the paw and guide the plug through the corridor " \
+		+ "without touching the edges, to the green dot, before time runs out."
 	body.position = Vector2(254, 400)
 	body.size = Vector2(782, 160)
 	_popup.add_child(body)
@@ -298,7 +298,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if not mb.pressed:
 			if mb.button_index == MOUSE_BUTTON_LEFT and _state == State.DRAGGING:
-				_lose("Tu as lâché le câble !")
+				_lose("You let go of the cable!")
 			return
 		match _state:
 			State.INTRO:
@@ -337,7 +337,7 @@ func _notification(what: int) -> void:
 	if _state != State.DRAGGING:
 		return
 	if what == NOTIFICATION_WM_MOUSE_EXIT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
-		_lose("Tu es sorti de la fenêtre !")
+		_lose("You left the window!")
 
 
 ## Avance la prise vers la souris par petits pas : un geste rapide ne peut pas
@@ -349,7 +349,7 @@ func _move_plug(target: Vector2) -> void:
 		var p := from.lerp(target, float(s) / steps)
 		_plug_pos = p
 		if _distance_to_track(p) + PLUG_RADIUS > HALF_WIDTH:
-			_lose("BZZZT ! Tu as touché le bord.")
+			_lose("BZZZT! You touched the edge.")
 			return
 		if p.distance_to(_trail[_trail.size() - 1]) >= TRAIL_STEP:
 			_trail.append(p)
@@ -416,7 +416,7 @@ func _win() -> void:
 		jingle.append_array(_synth(f, f, 0.11, false, 0.25))
 	_play(jingle)
 	Sons.play("debranche")
-	_finish(true, "Câble débranché en %.2f s" % _elapsed)
+	_finish(true, "Cable unplugged in %.2f s" % _elapsed)
 
 
 ## Affiche l'écran de fin après un court délai (laisse le temps aux étincelles/au
@@ -440,7 +440,7 @@ func _process(delta: float) -> void:
 	if _state == State.IDLE or _state == State.DRAGGING:
 		_time_left = maxf(_time_left - delta, 0.0)
 		if _time_left <= 0.0:
-			_lose("Temps écoulé ! Le câble est resté branché.")
+			_lose("Time's up! The cable is still plugged in.")
 	_shake = maxf(0.0, _shake - delta * 2.5)
 	_flash = maxf(0.0, _flash - delta * 3.0)
 	for sp in _sparks:

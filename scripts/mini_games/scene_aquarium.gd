@@ -72,8 +72,8 @@ const DIP_COOLDOWN := 0.3
 const PANIC_RADIUS := 230.0
 ## Manette : le viseur freine sur le poisson le plus proche (n'importe lequel, pour ne rien dévoiler).
 const PAD_ASSIST_RADIUS := 60.0
-const DIP_WORDS := ["PLOUF !", "SPLASH !", "BLOUP !", "SPLOUTCH !"]
-const WRONG_WORDS := ["OUPS !", "PAS LUI !", "RATÉ !", "BEURK !"]
+const DIP_WORDS := ["PLOP!", "SPLASH!", "BLOOP!", "SPLOOSH!"]
+const WRONG_WORDS := ["OOPS!", "NOT HIM!", "MISS!", "YUCK!"]
 ## Où atterrissent les poissons éjectés : bandes de parquet libres autour de l'aquarium.
 const LANDING_ZONES := [Rect2(22, 190, 70, 440), Rect2(170, 684, 700, 20), Rect2(170, 128, 900, 14)]
 
@@ -280,7 +280,7 @@ func _build_popup() -> void:
 	_popup.add_child(box)
 
 	var title := _make_label(42, COL_DARK)
-	title.text = "MISSION : WHERE IS … THE FISH?"
+	title.text = "MISSION: WHERE IS … THE FISH?"
 	title.position = Vector2(215, 354)
 	title.size = Vector2(860, 45)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -474,7 +474,7 @@ func _try_catch(p: Vector2) -> void:
 	_noise += noise_per_dip
 	if caught != null and caught.is_target:
 		_catch_target(caught, p)
-		_finish(true, "Poisson rose pêché en %.1f s  ·  Bruit %d %%" % [time_limit - _time_left, roundi(_noise)])
+		_finish(true, "Pink fish caught in %.1f s  ·  Noise %d %%" % [time_limit - _time_left, roundi(_noise)])
 		return
 
 	# Plouf : gerbe d'eau, et tous les poissons du coin s'affolent.
@@ -501,7 +501,7 @@ func _try_catch(p: Vector2) -> void:
 		_pop_text(DIP_WORDS.pick_random(), p)
 
 	if _noise >= NOISE_MAX:
-		_finish(false, "Trop de bruit : toute la maison est réveillée !")
+		_finish(false, "Too much noise: the whole house is awake!")
 
 
 ## Mauvais poisson : éjecté hors de l'aquarium, il atterrit sur le parquet et y gigote.
@@ -524,7 +524,7 @@ func _fling_fish(f: Fish, from: Vector2) -> void:
 			_eau.dribble(f.global_position), 0.0, 1.0, 0.6)
 	fly.tween_callback(func() -> void:
 		_eau.splash(land, 0.35)
-		_pop_text("FLOP !", land)
+		_pop_text("FLOP!", land)
 		Sons.play("flop")
 		_flop(f))
 
@@ -555,7 +555,7 @@ func _catch_target(f: Fish, from: Vector2) -> void:
 	_shake = 1.5
 	_flash_screen(0.5)
 	_hit_stop(0.18)
-	_pop_text("GOTCHA !", from)
+	_pop_text("GOTCHA!", from)
 	var local := from - _water.global_position
 	for other in _fishes:
 		other.panic(local, PANIC_RADIUS * 2.0)
@@ -565,7 +565,7 @@ func _catch_target(f: Fish, from: Vector2) -> void:
 	fly.parallel().tween_property(f, "global_position", _paw_rest, 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	fly.tween_property(f, "scale", Vector2.ZERO, 0.12)
 	fly.tween_callback(func() -> void:
-		_pop_text("MIAM !", _paw_rest)
+		_pop_text("YUM!", _paw_rest)
 		_audio.play())
 
 
@@ -642,7 +642,7 @@ func _process(delta: float) -> void:
 	_time_left = maxf(_time_left - delta, 0.0)
 	_update_time_label()
 	if _time_left <= 0.0:
-		_finish(false, "Temps écoulé : le poisson rose t'a échappé !")
+		_finish(false, "Time's up: the pink fish got away!")
 
 
 ## Manette : le viseur freine sur le poisson le plus proche, quel qu'il soit (rien n'est dévoilé).

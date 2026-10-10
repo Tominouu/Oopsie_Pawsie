@@ -49,7 +49,7 @@ const HIT_RADIUS := 55.0
 ## Manette : rayon autour du corps où l'aide à la visée agit.
 const PAD_ASSIST_RADIUS := 90.0
 const STRIKE_COOLDOWN := 0.22
-const HIT_WORDS := ["SPLAT !", "SCRONCH !", "PAF !", "CRAC !", "SPLOTCH !"]
+const HIT_WORDS := ["SPLAT!", "SCRONCH!", "WHAM!", "CRACK!", "SPLOTCH!"]
 const NOISE_MAX := 100.0
 
 const COL_GROUT := Color("ba9b7c")
@@ -422,7 +422,7 @@ func _process(delta: float) -> void:
 	_time_left = maxf(_time_left - delta, 0.0)
 	_update_time_label()
 	if _time_left <= 0.0:
-		_finish(false, "Temps écoulé : la souris court toujours !")
+		_finish(false, "Time's up: the mouse is still on the loose!")
 
 
 func _paw_rest_position() -> Vector2:
@@ -451,7 +451,7 @@ func _strike(at: Vector2) -> void:
 		_spawn_griffe(at)
 		if lethal:
 			_kill_fx(at, swing)
-			_finish(true, "Souris éliminée en %d coups  ·  Bruit %d %%" % [_proie.hits + _misses, roundi(_noise)])
+			_finish(true, "Mouse eliminated in %d hits  ·  Noise %d %%" % [_proie.hits + _misses, roundi(_noise)])
 			return
 		_hit_fx(at, swing)
 	elif _proie.tail_hit_test(at):
@@ -461,7 +461,7 @@ func _strike(at: Vector2) -> void:
 		_spawn_griffe(at)
 		_sang.splash(at, swing, 0.5)
 		_shake = maxf(_shake, 0.3)
-		_pop_text("SNIP !", at)
+		_pop_text("SNIP!", at)
 		Sons.play("snip")
 		Sons.play("gicle", -6.0)
 	else:
@@ -470,7 +470,7 @@ func _strike(at: Vector2) -> void:
 		Sons.play("patte_sol")
 
 	if _noise >= NOISE_MAX:
-		_finish(false, "Trop de bruit : la souris s'est enfuie !")
+		_finish(false, "Too much noise: the mouse ran away!")
 
 
 ## Coup qui touche : giclée de plus en plus grosse à chaque coup, écran qui tremble, flash, mini arrêt sur image.
@@ -501,7 +501,7 @@ func _kill_fx(at: Vector2, swing: Vector2) -> void:
 	_shake = 1.6
 	_flash_screen(0.5)
 	Sang.screen_splats(_fx_layer, 7, SCREEN)
-	_pop_text("K.O. !", at)
+	_pop_text("K.O.!", at)
 	_hit_stop(0.18)
 	for i in 4:
 		await get_tree().create_timer(0.09, true, false, true).timeout

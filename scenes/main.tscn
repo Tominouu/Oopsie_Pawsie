@@ -46,7 +46,7 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(0.85, 0.85, 0.85, 1)
 theme_override_font_sizes/font_size = 20
-text = "Choisis un mini-jeu"
+text = "Pick a mini-game"
 horizontal_alignment = 1
 
 [node name="Spacer" type="Control" parent="CenterContainer/VBoxContainer" unique_id=1613743177]
@@ -57,28 +57,28 @@ layout_mode = 2
 custom_minimum_size = Vector2(360, 72)
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
-text = "🐟  Trouve le poisson rose"
+text = "🐟  Find the pink fish"
 
 [node name="CableButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=117205557]
 custom_minimum_size = Vector2(360, 72)
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
-text = "🔌  Débranche le câble"
+text = "🔌  Unplug the cable"
 
 [node name="CroquettesButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=308376199]
 custom_minimum_size = Vector2(360, 72)
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
-text = "🐾  Trouve les croquettes"
+text = "🐾  Find the kibble"
 
 [node name="RythmeButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=308376200]
 custom_minimum_size = Vector2(360, 72)
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
-text = "🎵  Griffure rythmée"
+text = "🎵  Rhythm scratching"
 
 [node name="SourisButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=308376201]
 custom_minimum_size = Vector2(360, 72)
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
-text = "🐭  Élimine l'intrus"
+text = "🐭  Eliminate the intruder"

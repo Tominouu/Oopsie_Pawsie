@@ -32,11 +32,11 @@ const LAYERS := [
 
 ## Objets qui lancent un mini-jeu (une « mission ») : nom du résultat (GameManager), calques, scène, texte.
 const INTERACTABLES := [
-	{"id": "aquarium", "layers": ["aquarium"], "scene": "res://scenes/mini_games/scene_aquarium.tscn", "label": "Pêcher le poisson rose"},
-	{"id": "souris", "layers": ["souris"], "scene": "res://scenes/mini_games/souris.tscn", "label": "Chasser la souris"},
-	{"id": "croquettes", "layers": ["placard_gauche", "placard_droit"], "scene": "res://scenes/mini_games/croquettes.tscn", "label": "Fouiller les placards"},
-	{"id": "canape", "layers": ["canape"], "scene": "res://scenes/mini_games/rythme.tscn", "label": "Griffer le canapé"},
-	{"id": "cable", "layers": ["meuble_tv"], "scene": "res://scenes/mini_games/cable.tscn", "label": "Débrancher la télé"},
+	{"id": "aquarium", "layers": ["aquarium"], "scene": "res://scenes/mini_games/scene_aquarium.tscn", "label": "Catch the pink fish"},
+	{"id": "souris", "layers": ["souris"], "scene": "res://scenes/mini_games/souris.tscn", "label": "Hunt the mouse"},
+	{"id": "croquettes", "layers": ["placard_gauche", "placard_droit"], "scene": "res://scenes/mini_games/croquettes.tscn", "label": "Search the cupboards"},
+	{"id": "canape", "layers": ["canape"], "scene": "res://scenes/mini_games/rythme.tscn", "label": "Scratch the sofa"},
+	{"id": "cable", "layers": ["meuble_tv"], "scene": "res://scenes/mini_games/cable.tscn", "label": "Unplug the TV"},
 ]
 
 ## Le lit : en poussant dedans (ou E / A à côté), le chat saute et se glisse sous la couette.
@@ -498,7 +498,7 @@ func _try_pee() -> void:
 	if not _in_bed or _jumping or _pipi.is_peeing():
 		return
 	if _pee_cooldown > 0.0:
-		_pop_message("Vessie vide… reviens dans %d s" % ceili(_pee_cooldown), BED_RECT)
+		_pop_message("Empty bladder… come back in %d s" % ceili(_pee_cooldown), BED_RECT)
 		return
 	_bed_target = Vector2.INF
 	_push = 0.0
@@ -513,7 +513,7 @@ func _pee_done() -> void:
 	_was_peeing = false
 	_pee_cooldown = PEE_REFILL
 	_cat.rotation = _pee_rot
-	_pop_message("Ahhh… soulagé !", BED_RECT, false)
+	_pop_message("Ahhh… much better!", BED_RECT, false)
 	var meow := AudioStreamPlayer.new()
 	meow.stream = MEOW
 	meow.pitch_scale = 1.25
@@ -539,7 +539,7 @@ func _launch(obj: Dictionary) -> void:
 	# Une mission réussie ne se refait pas : la nuit est comptée.
 	if GameManager.is_mission_done(obj.id):
 		_pending = {}
-		_pop_message("Mission déjà accomplie !", _object_rect(obj))
+		_pop_message("Mission already done!", _object_rect(obj))
 		return
 	Sons.play("lancer_jeu")
 	GameManager.launch_mini_game(obj.scene, _cat.position, _cat.rotation)
@@ -569,7 +569,7 @@ func _pop_message(text: String, rect: Rect2, refused := true) -> void:
 
 ## Texte d'un objet : sa mission, ou « Mission accomplie » si elle est faite.
 func _label_of(obj: Dictionary) -> String:
-	return "Mission accomplie !" if GameManager.is_mission_done(obj.id) else obj.label
+	return "Mission complete!" if GameManager.is_mission_done(obj.id) else obj.label
 
 
 ## Fin de la nuit : les 5 missions faites (victoire) ou le jour levé (défaite).
@@ -835,13 +835,13 @@ func _update_hover() -> void:
 	_tooltip.visible = not _hovered.is_empty() or _quit_hovered or _bed_hovered
 	if _tooltip.visible:
 		if _quit_hovered:
-			_tooltip_label.text = "Retour au menu"
+			_tooltip_label.text = "Back to menu"
 		elif _bed_hovered:
-			_tooltip_label.text = "Se glisser sous la couette  ·  %s" % ("clic" if _near_bed else "clic pour y aller")
+			_tooltip_label.text = "Slip under the duvet  ·  %s" % ("click" if _near_bed else "click to go there")
 		elif _hovered == _near:
-			_tooltip_label.text = "%s  ·  clic" % _label_of(_hovered)
+			_tooltip_label.text = "%s  ·  click" % _label_of(_hovered)
 		else:
-			_tooltip_label.text = "%s  ·  clic pour y aller" % _label_of(_hovered)
+			_tooltip_label.text = "%s  ·  click to go there" % _label_of(_hovered)
 		_tooltip.reset_size()
 		var pos := mouse + Vector2(18, 18)
 		pos.x = minf(pos.x, SCREEN.x - _tooltip.size.x - 8)
@@ -852,19 +852,19 @@ func _update_hover() -> void:
 	var text := ""
 	var rect := Rect2()
 	if _in_bed:
-		text = "Sortir du lit"
+		text = "Get out of bed"
 		rect = BED_RECT
 	elif not _near.is_empty() and _hovered != _near:
 		text = _label_of(_near)
 		rect = _object_rect(_near)
 	elif _near_bed and not _bed_hovered:
-		text = "Se glisser sous la couette"
+		text = "Slip under the duvet"
 		rect = BED_RECT
 	_prompt.visible = text != "" and not _jumping and not _pipi.is_peeing()
 	if _prompt.visible:
-		_prompt_label.text = "%s : %s" % ["A" if _using_pad else "E", text]
+		_prompt_label.text = "%s: %s" % ["A" if _using_pad else "E", text]
 		if _in_bed:
-			_prompt_label.text += "   ·   %s : Faire pipi" % ("X" if _using_pad else "P")
+			_prompt_label.text += "   ·   %s: Pee" % ("X" if _using_pad else "P")
 		_prompt.reset_size()
 		var pos := Vector2(rect.get_center().x - _prompt.size.x * 0.5, rect.position.y - _prompt.size.y - 8)
 		if pos.y < HEADER_H + 4:

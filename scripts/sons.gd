@@ -55,7 +55,7 @@ func _ready() -> void:
 func play(name: String, volume_offset := 0.0, pitch := 1.0) -> void:
 	var entry: Array = BANK.get(name, [])
 	if entry.is_empty():
-		push_warning("Son inconnu : %s" % name)
+		push_warning("Unknown sound: %s" % name)
 		return
 	var stream := _stream(name, entry[0])
 	if stream == null:

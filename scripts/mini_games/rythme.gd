@@ -350,18 +350,18 @@ func _register_hit(n: Note) -> void:
 
 func _register_miss(n: Note) -> void:
 	if _combo >= 5:
-		_pop_text("COMBO PERDU", Vector2(HIT_X, n.position.y + 60), Color("ff6b6b"), 28)
+		_pop_text("COMBO LOST", Vector2(HIT_X, n.position.y + 60), Color("ff6b6b"), 28)
 	_combo = 0
 	_miss_flash = 1.0
 	_shake = maxf(_shake, 0.3)
-	_pop_text("RATÉ !", n.position + Vector2(0, -60), Color("c8c8c8"), 30)
+	_pop_text("MISS!", n.position + Vector2(0, -60), Color("c8c8c8"), 30)
 	Sons.play("note_ratee")
 	n.crumble()
 
 
 ## Tous les COMBO_STEP coups : bannière, flash, gerbe de rembourrage.
 func _combo_banner() -> void:
-	_pop_text("COMBO x%d !" % _combo, Vector2(SCREEN.x * 0.55, 330), Color("ffd23f"), 72)
+	_pop_text("COMBO x%d!" % _combo, Vector2(SCREEN.x * 0.55, 330), Color("ffd23f"), 72)
 	Sons.play("combo")
 	_shake = maxf(_shake, 0.8)
 	_miss_flash = 0.0

@@ -33,13 +33,13 @@ const CHIPS_INDEX := 1
 ## Pour chaque produit (même ordre que PRODUCTS) : son contenu, le son joué (voir sons.gd), le bruit qu'il fait en tombant
 ## (multiplie noise_per_item) et ses onomatopées.
 const PRODUCT_FX := [
-	{"kind": "cereales", "sound": "cereales", "noise": 1.0, "words": ["CRAC !", "SCRITCH !"]},
-	{"kind": "chips", "sound": "chips", "noise": 1.25, "words": ["CRUNCH !", "CROUNCH !"]},
-	{"kind": "mais", "sound": "conserve", "noise": 2.5, "words": ["CLANG !", "BONG !"]},
-	{"kind": "pois", "sound": "conserve", "noise": 2.5, "words": ["CLONG !", "BANG !"]},
-	{"kind": "farine", "sound": "farine", "noise": 0.75, "words": ["POUF !", "PFFF !"]},
-	{"kind": "pates", "sound": "pates", "noise": 1.0, "words": ["CRAC CRAC !", "CLIC !"]},
-	{"kind": "poisson", "sound": "sac", "noise": 1.0, "words": ["LEURRE !", "BEURK !"]},
+	{"kind": "cereales", "sound": "cereales", "noise": 1.0, "words": ["CRACK!", "SCRITCH!"]},
+	{"kind": "chips", "sound": "chips", "noise": 1.25, "words": ["CRUNCH!", "CRONCH!"]},
+	{"kind": "mais", "sound": "conserve", "noise": 2.5, "words": ["CLANG!", "BONG!"]},
+	{"kind": "pois", "sound": "conserve", "noise": 2.5, "words": ["CLONK!", "BANG!"]},
+	{"kind": "farine", "sound": "farine", "noise": 0.75, "words": ["POOF!", "PFFT!"]},
+	{"kind": "pates", "sound": "pates", "noise": 1.0, "words": ["CRACK CRACK!", "CLICK!"]},
+	{"kind": "poisson", "sound": "sac", "noise": 1.0, "words": ["DECOY!", "YUCK!"]},
 ]
 
 ## Jauge de bruit : même emplacement et même style que dans le mini-jeu de la souris.
@@ -277,7 +277,7 @@ func _build_popup() -> void:
 	_popup.add_child(box)
 
 	var title := _make_label(42, COL_DARK)
-	title.text = "MISSION : OPERATION CAT FOOD"
+	title.text = "MISSION: OPERATION CAT FOOD"
 	title.position = Vector2(215, 328)
 	title.size = Vector2(860, 45)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -409,7 +409,7 @@ func _process(delta: float) -> void:
 	_time_left = maxf(_time_left - delta, 0.0)
 	_update_time_label()
 	if _time_left <= 0.0:
-		_finish(false, "Temps écoulé : les croquettes étaient là !")
+		_finish(false, "Time's up: the kibble was right there!")
 
 
 func _update_time_label() -> void:
@@ -427,22 +427,22 @@ func _strike(at: Vector2) -> void:
 			continue
 		if item.is_target:
 			_jackpot(item, at)
-			_finish(true, "Croquettes trouvées en %.1f s  ·  %d produits dégagés  ·  Bruit %d %%" \
+			_finish(true, "Kibble found in %.1f s  ·  %d items moved  ·  Noise %d %%" \
 				% [time_limit - _time_left, _cleared, roundi(_noise / noise_max * 100.0)])
 		else:
 			_throw(item, at)
 			if _noise >= noise_max:
-				_finish(false, "Trop de bruit : les humains se réveillent !")
+				_finish(false, "Too much noise: the humans are waking up!")
 		return
 
 	# Coup de patte dans le vide sur la planche : petit « toc » qui fait un peu de bruit.
 	if PLANK_RECT.has_point(at):
 		_noise += noise_per_tap
 		_shake = maxf(_shake, 0.15)
-		_pop_text("TOC !", at, 28)
+		_pop_text("KNOCK!", at, 28)
 		Sons.play("toc")
 		if _noise >= noise_max:
-			_finish(false, "Trop de bruit : les humains se réveillent !")
+			_finish(false, "Too much noise: the humans are waking up!")
 
 
 func _throw(item: Item, at: Vector2) -> void:
@@ -491,7 +491,7 @@ func _jackpot(bag: Item, at: Vector2) -> void:
 	_shake = 1.5
 	_flash_screen(0.45)
 	_hit_stop(0.18)
-	_pop_text("JACKPOT !", at, 52)
+	_pop_text("JACKPOT!", at, 52)
 	Sons.play("jackpot")
 	Sons.play("sac", 2.0)
 	for i in 3:
