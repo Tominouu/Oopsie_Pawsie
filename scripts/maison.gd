@@ -603,7 +603,9 @@ func _eat_torch() -> void:
 
 ## Premier passage dans le noir : on explique quoi faire.
 func _hint_torch() -> void:
-	_pop_message("It's pitch dark… the TV is on, check the sofa!", Rect2(_cat.position - Vector2(0, 40), Vector2.ZERO), false, 3.5)
+	var text := "It's pitch dark… find the flashlight on the sofa!" if GameManager.is_mission_done("cable") \
+		else "It's pitch dark… the TV is on, check the sofa!"
+	_pop_message(text,Rect2(_cat.position - Vector2(0, 40), Vector2.ZERO), false, 3.5)
 
 
 func _refresh_dark(delta: float) -> void:

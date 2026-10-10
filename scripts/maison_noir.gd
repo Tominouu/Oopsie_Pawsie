@@ -87,6 +87,9 @@ func refresh(delta: float, cat_pos: Vector2, cat_dir: Vector2, torch: float, ite
 	var flicker := 0.85 + 0.1 * sin(_tv_t * 7.0) + 0.06 * sin(_tv_t * 23.0 + 1.3)
 	if fmod(_tv_t, 3.7) < 0.12:
 		flicker *= 0.6
+	# Câble débranché (mission réussie) : la télé est éteinte, plus de lumière.
+	if GameManager.is_mission_done("cable"):
+		flicker = 0.0
 	_mat.set_shader_parameter("tv", flicker)
 	if item.is_finite():
 		_mat.set_shader_parameter("item_pos", item)
